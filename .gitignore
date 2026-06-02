@@ -1,0 +1,10 @@
+/bin/
+/dist/
+*.exe
+*.test
+.env
+coverage.out
+coverage.html
+.idea/
+.vscode/
+docs/

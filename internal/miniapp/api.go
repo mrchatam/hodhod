@@ -1,0 +1,166 @@
+package miniapp
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/mrchatam/hodhod/internal/billing"
+	"github.com/mrchatam/hodhod/internal/crypto"
+	"github.com/mrchatam/hodhod/internal/db"
+	"github.com/mrchatam/hodhod/internal/provisioning"
+)
+
+// API serves Mini App JSON endpoints.
+type API struct {
+	Store  *db.Store
+	Box    *crypto.Box
+	Orders *billing.OrderService
+	Wallet *billing.WalletService
+	Prov   *provisioning.Service
+}
+
+// Routes mounts miniapp routes on r.
+func (a *API) Routes(r chi.Router) {
+	r.Route("/api/miniapp/{publicID}", func(r chi.Router) {
+		r.Get("/plans", a.plans)
+		r.Get("/wallet", a.wallet)
+		r.Get("/services", a.services)
+		r.Post("/orders", a.createOrder)
+		r.Post("/wallet/topup", a.createTopUp)
+	})
+}
+
+func (a *API) auth(r *http.Request) (botID int64, tgID int64, user *db.EndUser, err error) {
+	publicID := chi.URLParam(r, "publicID")
+	initData := r.Header.Get("X-Telegram-Init-Data")
+	if initData == "" {
+		initData = r.URL.Query().Get("initData")
+	}
+	bot, err := a.Store.GetBotByPublicID(r.Context(), publicID)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	token, err := a.Box.Decrypt(bot.TokenEnc)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	tgID, err = ValidateInitData(initData, token, 24*time.Hour)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	user, err = a.Store.GetOrCreateEndUser(r.Context(), bot.ID, tgID)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	return bot.ID, tgID, user, nil
+}
+
+func (a *API) plans(w http.ResponseWriter, r *http.Request) {
+	botID, _, _, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	plans, err := a.Store.ListPlansByBot(r.Context(), botID, true)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(plans)
+}
+
+func (a *API) wallet(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	_ = botID
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]int64{"balance_toman": user.BalanceToman})
+}
+
+func (a *API) services(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	svcs, err := a.Store.ListServicesByUser(r.Context(), botID, user.ID)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(svcs)
+}
+
+func (a *API) createOrder(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		PlanID int64 `json:"plan_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PlanID == 0 {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	plan, err := a.Store.GetPlan(r.Context(), botID, body.PlanID)
+	if err != nil {
+		http.Error(w, "plan not found", http.StatusNotFound)
+		return
+	}
+	if user.BalanceToman < plan.PriceToman {
+		http.Error(w, "insufficient balance", http.StatusPaymentRequired)
+		return
+	}
+	order, err := a.Orders.PurchaseFromWallet(r.Context(), botID, user, plan)
+	if err != nil {
+		http.Error(w, "purchase failed", http.StatusInternalServerError)
+		return
+	}
+	svc, err := a.Prov.ProvisionOrder(r.Context(), botID, order)
+	if err != nil {
+		_ = a.Wallet.Credit(r.Context(), botID, user.ID, plan.PriceToman, "provision_refund", "order", order.ID)
+		order.Status = db.OrderRejected
+		_ = a.Store.UpdateOrder(r.Context(), botID, order)
+		http.Error(w, "provisioning failed", http.StatusBadGateway)
+		return
+	}
+	_ = a.Orders.MarkOrderProvisioned(r.Context(), botID, order.ID)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"order_id": order.ID,
+		"service":  svc,
+	})
+}
+
+func (a *API) createTopUp(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		Amount     int64  `json:"amount_toman"`
+		ReceiptRef string `json:"receipt_ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Amount < 1000 || body.ReceiptRef == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	payment, err := a.Orders.CreateTopUpPayment(r.Context(), botID, user.ID, body.Amount, body.ReceiptRef)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payment)
+}

@@ -1,0 +1,12 @@
+{{define "bots.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1 class="text-2xl font-bold mb-4">Bots</h1>
+<ul class="mb-6">{{range .Bots}}<li>@{{.Username}} ({{.PublicID}}) agent={{.AgentID}}</li>{{end}}</ul>
+<form method="post" action="/master/bots" class="bg-white p-4 rounded shadow grid gap-2">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <select name="agent_id" class="border p-2">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+  <input name="token" placeholder="Bot token" class="border p-2" required>
+  <input name="username" placeholder="Bot username" class="border p-2">
+  <button class="bg-blue-600 text-white px-4 py-2 rounded">Add Bot</button>
+</form>
+{{end}}

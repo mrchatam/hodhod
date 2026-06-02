@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://telegram.org; script-src 'self' https://telegram.org; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
+  <title>Hodhod Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1rem; }
+    section { margin-bottom: 1.5rem; }
+    button { margin: 0.25rem 0; padding: 0.5rem 1rem; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Hodhod</h1>
+  <section>
+    <h2>Wallet</h2>
+    <div id="wallet">...</div>
+  </section>
+  <section>
+    <h2>Plans</h2>
+    <div id="plans"></div>
+  </section>
+  <section>
+    <h2>My Services</h2>
+    <div id="services"></div>
+  </section>
+  <section>
+    <h2>Top up</h2>
+    <input id="topup-amount" type="number" placeholder="Amount (Toman)" min="1000">
+    <input id="topup-ref" type="text" placeholder="Receipt reference">
+    <button id="topup-btn">Submit top-up</button>
+    <div id="topup-msg"></div>
+  </section>
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+    const publicID = new URLSearchParams(location.search).get('bot') || '';
+    const base = '/api/miniapp/' + publicID;
+    const headers = () => ({
+      'Content-Type': 'application/json',
+      'X-Telegram-Init-Data': tg.initData,
+    });
+
+    async function loadWallet() {
+      const r = await fetch(base + '/wallet', { headers: headers() });
+      const d = await r.json();
+      document.getElementById('wallet').textContent = 'Balance: ' + d.balance_toman + ' Toman';
+    }
+
+    async function loadPlans() {
+      const r = await fetch(base + '/plans', { headers: headers() });
+      const plans = await r.json();
+      document.getElementById('plans').innerHTML = plans.map(p =>
+        '<div class="card">' + p.name + ' — ' + p.price_toman + ' Toman' +
+        '<br><button onclick="buy(' + p.id + ')">Buy</button></div>'
+      ).join('');
+    }
+
+    async function loadServices() {
+      const r = await fetch(base + '/services', { headers: headers() });
+      const svcs = await r.json();
+      document.getElementById('services').innerHTML = svcs.length
+        ? svcs.map(s => '<div class="card">' + s.panel_username + '<br><small>' + s.sub_link + '</small></div>').join('')
+        : '<p>No services yet.</p>';
+    }
+
+    async function buy(planId) {
+      const r = await fetch(base + '/orders', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ plan_id: planId }),
+      });
+      if (!r.ok) {
+        alert('Purchase failed: ' + r.status);
+        return;
+      }
+      await loadWallet();
+      await loadServices();
+      alert('Service ready!');
+    }
+
+    document.getElementById('topup-btn').onclick = async () => {
+      const amount = parseInt(document.getElementById('topup-amount').value, 10);
+      const receipt_ref = document.getElementById('topup-ref').value.trim();
+      const r = await fetch(base + '/wallet/topup', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ amount_toman: amount, receipt_ref }),
+      });
+      document.getElementById('topup-msg').textContent = r.ok ? 'Top-up submitted.' : 'Top-up failed.';
+    };
+
+    loadWallet();
+    loadPlans();
+    loadServices();
+  </script>
+</body>
+</html>

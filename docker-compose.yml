@@ -1,0 +1,39 @@
+services:
+  hodhod-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hodhod
+      POSTGRES_PASSWORD: hodhod
+      POSTGRES_DB: hodhod
+    volumes:
+      - hodhod_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hodhod"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  hodhod-app:
+    build: .
+    depends_on:
+      hodhod-db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_DSN: postgres://hodhod:hodhod@hodhod-db:5432/hodhod?sslmode=disable
+      RUN_MIGRATIONS: "true"
+      HTTP_ADDR: ":8080"
+    ports:
+      - "127.0.0.1:8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  hodhod_pg:
