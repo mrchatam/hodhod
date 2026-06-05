@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -213,7 +214,7 @@ func (s *Server) saveBotSettings(r *http.Request, botID int64) {
 }
 
 func (s *Server) postBotWithToken(r *http.Request, agentID int64) error {
-	token := r.FormValue("token")
+	token := strings.TrimSpace(r.FormValue("token"))
 	username, err := telegram.ValidateToken(r.Context(), s.Box, token, s.Telegram.HTTPClient())
 	if err != nil {
 		return err
@@ -221,6 +222,9 @@ func (s *Server) postBotWithToken(r *http.Request, agentID int64) error {
 	b, err := telegram.CreateBotRecord(r.Context(), s.Store, s.Box, agentID, token, username)
 	if err != nil {
 		return err
+	}
+	if v := strings.TrimSpace(r.FormValue("approver_tg_id")); v != "" {
+		_ = s.Store.SetSetting(r.Context(), "bot", b.ID, "approver_tg_id", v)
 	}
 	return s.Telegram.Add(r.Context(), b.ID)
 }

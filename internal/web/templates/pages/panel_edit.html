@@ -1,13 +1,90 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">Edit panel: {{.Panel.Name}}</h2>
-<form method="post" action="/master/panels/{{.Panel.ID}}" class="bg-white rounded-xl border p-6 space-y-3 max-w-lg">
+<div class="flex items-center gap-3 mb-2">
+  <a href="/master/panels" class="btn btn-link btn-sm">← Panels</a>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 mb-2">{{.Panel.Name}}</h2>
+<p class="text-sm text-slate-500 mb-6">Panel details and credentials</p>
+
+<div class="grid lg:grid-cols-3 gap-6 mb-6">
+  <div class="bg-white rounded-xl border p-5 space-y-2 text-sm lg:col-span-1">
+    <h3 class="font-semibold text-slate-800 mb-3">Details</h3>
+    <p><span class="text-slate-500">Type:</span> {{.Panel.Type}}</p>
+    <p><span class="text-slate-500">Status:</span>
+      <span class="badge {{if eq .Panel.Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Panel.Status}}</span>
+    </p>
+    <p><span class="text-slate-500">Created:</span> {{time .Panel.CreatedAt}}</p>
+    <p><span class="text-slate-500">Username:</span> {{.Panel.Username}}</p>
+    <p class="break-all"><span class="text-slate-500">URL:</span> {{.Panel.BaseURL}}{{if .Panel.BasePath}}{{.Panel.BasePath}}{{end}}</p>
+    <div id="panel-test-{{.Panel.ID}}" class="pt-2"></div>
+    <form hx-post="/master/panels/{{.Panel.ID}}/test" hx-target="#panel-test-{{.Panel.ID}}" hx-swap="innerHTML" class="pt-1">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <button type="submit" class="btn btn-secondary btn-sm">Test connection</button>
+    </form>
+  </div>
+
+  <div class="bg-white rounded-xl border p-5 text-sm lg:col-span-1">
+    <h3 class="font-semibold text-slate-800 mb-3">Agent assignments</h3>
+    {{if .AgentRows}}
+    <ul class="space-y-2">{{range .AgentRows}}
+      <li class="bg-slate-50 p-2 rounded"><a href="/master/agents/{{.AgentID}}" class="text-brand-600">{{.AgentName}}</a> · max {{.MaxUsers}} users · cap {{.ExpiryCap}}d</li>
+    {{end}}</ul>
+    {{else}}<p class="text-slate-400">Not assigned to any agent yet.</p>{{end}}
+  </div>
+
+  <div class="bg-white rounded-xl border p-5 text-sm lg:col-span-1">
+    <h3 class="font-semibold text-slate-800 mb-3">Bot assignments</h3>
+    {{if .BotRows}}
+    <ul class="space-y-2">{{range .BotRows}}
+      <li class="bg-slate-50 p-2 rounded"><a href="/master/bots/{{.BotID}}/settings" class="text-brand-600">@{{.BotUsername}}</a> · agent {{.AgentID}}</li>
+    {{end}}</ul>
+    {{else}}<p class="text-slate-400">No bots linked to this panel.</p>{{end}}
+  </div>
+</div>
+
+<form method="post" action="/master/panels/{{.Panel.ID}}" id="panel-edit-form" class="bg-white rounded-xl border p-6 space-y-4 max-w-2xl">
+  <h3 class="font-semibold text-slate-800">Edit credentials</h3>
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <input name="name" value="{{.Panel.Name}}" class="w-full border rounded-lg p-2" required>
-  <input name="base_url" value="{{.Panel.BaseURL}}" class="w-full border rounded-lg p-2" required>
-  <input name="base_path" value="{{.Panel.BasePath}}" class="w-full border rounded-lg p-2">
-  <input name="username" value="{{.Panel.Username}}" class="w-full border rounded-lg p-2" required>
-  <input name="password" type="password" placeholder="New password (optional)" class="w-full border rounded-lg p-2">
-  <input name="api_token" type="password" placeholder="New API token (optional)" class="w-full border rounded-lg p-2">
-  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Save</button>
+  <label class="form-field">
+    <span class="form-label">Name</span>
+    <input name="name" value="{{.Panel.Name}}" class="form-input" required>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Base URL</span>
+    <input name="base_url" value="{{.Panel.BaseURL}}" class="form-input" required>
+    <p class="form-hint">{{if eq .Panel.Type "xui"}}Include scheme and port, e.g. <code>https://host:2053</code>{{else}}Include <code>https://</code>, no trailing slash{{end}}</p>
+  </label>
+  {{if eq .Panel.Type "xui"}}
+  <label class="form-field">
+    <span class="form-label">Base path</span>
+    <input name="base_path" value="{{.Panel.BasePath}}" class="form-input">
+    <p class="form-hint">Path prefix from 3x-ui install, e.g. <code>/a1b2c3d4</code></p>
+  </label>
+  {{else}}
+  <input type="hidden" name="base_path" value="{{.Panel.BasePath}}">
+  {{end}}
+  <label class="form-field">
+    <span class="form-label">Username</span>
+    <input name="username" value="{{.Panel.Username}}" class="form-input" required>
+  </label>
+  <label class="form-field">
+    <span class="form-label">New password</span>
+    <input name="password" type="password" class="form-input" placeholder="Leave empty to keep current">
+  </label>
+  {{if eq .Panel.Type "xui"}}
+  <label class="form-field">
+    <span class="form-label">New API token</span>
+    <input name="api_token" type="password" class="form-input" placeholder="Leave empty to keep current">
+    <p class="form-hint">Optional if username/password auth works.</p>
+  </label>
+  {{end}}
+  <div class="flex flex-wrap gap-2 pt-2">
+    <button type="submit" class="btn btn-primary">Save</button>
+  </div>
 </form>
+{{if eq .Panel.Status "active"}}
+<form method="post" action="/master/panels/{{.Panel.ID}}/disable" onsubmit="return confirm('Disable this panel?')" class="mt-3 max-w-2xl">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <button type="submit" class="btn btn-danger">Disable panel</button>
+</form>
+{{end}}
 {{end}}

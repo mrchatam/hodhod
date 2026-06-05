@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/billing"
@@ -148,7 +149,8 @@ func (s *Server) postAgentBot(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = r.ParseForm()
 	if err := s.postBotWithToken(r, *admin.AgentID); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		s.setFlash(w, "err", err.Error())
+		http.Redirect(w, r, "/agent/bots", http.StatusSeeOther)
 		return
 	}
 	s.setFlash(w, "ok", "Bot added")
@@ -184,14 +186,17 @@ func (s *Server) postAgentBotSettings(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if token := r.FormValue("token"); token != "" {
 		username, err := telegram.ValidateToken(r.Context(), s.Box, token, s.Telegram.HTTPClient())
-		if err == nil {
-			bot, _ := s.Store.GetBot(r.Context(), id)
-			enc, _ := s.Box.Encrypt(token)
-			bot.TokenEnc = enc
-			bot.Username = username
-			_ = s.Store.UpdateBot(r.Context(), bot)
-			_ = s.Telegram.Reload(r.Context(), id)
+		if err != nil {
+			s.setFlash(w, "err", err.Error())
+			http.Redirect(w, r, fmt.Sprintf("/agent/bots/%d/settings", id), http.StatusSeeOther)
+			return
 		}
+		bot, _ := s.Store.GetBot(r.Context(), id)
+		enc, _ := s.Box.Encrypt(strings.TrimSpace(token))
+		bot.TokenEnc = enc
+		bot.Username = username
+		_ = s.Store.UpdateBot(r.Context(), bot)
+		_ = s.Telegram.Reload(r.Context(), id)
 	}
 	s.saveBotSettings(r, id)
 	s.setFlash(w, "ok", "Settings saved")

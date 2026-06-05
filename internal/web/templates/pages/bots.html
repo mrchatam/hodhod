@@ -2,17 +2,33 @@
 <h2 class="text-2xl font-bold text-slate-900 mb-6">Bots</h2>
 <div class="grid lg:grid-cols-2 gap-6">
   <div class="space-y-3">{{range .Bots}}
-  <div class="bg-white rounded-xl border p-4">
-    <p class="font-medium">@{{.Username}} <span class="text-xs text-slate-400">{{.PublicID}}</span></p>
-    <p class="text-xs text-slate-500">Agent {{.AgentID}} · {{.Status}}</p>
-    <a href="/master/bots/{{.ID}}/settings" class="text-brand-600 text-sm">Settings</a>
-  </div>{{end}}</div>
-  <form method="post" action="/master/bots" class="bg-white rounded-xl border p-6 space-y-3 h-fit">
+  <div class="bg-white rounded-xl border p-4 flex justify-between items-center">
+    <div>
+      <p class="font-medium">@{{.Username}} <span class="text-xs text-slate-400">{{.PublicID}}</span></p>
+      <p class="text-xs text-slate-500">Agent {{.AgentID}} · {{.Status}}</p>
+    </div>
+    <a href="/master/bots/{{.ID}}/settings" class="btn btn-secondary btn-sm">Settings</a>
+  </div>{{else}}
+  <p class="text-slate-400 text-sm">No bots yet.</p>
+  {{end}}</div>
+  <form method="post" action="/master/bots" class="bg-white rounded-xl border p-6 space-y-4 h-fit">
+    <h3 class="font-semibold text-slate-800">Add bot</h3>
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <select name="agent_id" class="w-full border rounded-lg p-2">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
-    <input name="token" placeholder="Bot token from @BotFather" class="w-full border rounded-lg p-2" required>
-    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Add bot</button>
-    <p class="text-xs text-slate-500">Username is fetched via getMe; webhook is set automatically.</p>
+    <label class="form-field">
+      <span class="form-label">Agent</span>
+      <select name="agent_id" class="form-input">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Bot token</span>
+      <input name="token" class="form-input" placeholder="123456789:AAH..." required>
+      <p class="form-hint">From @BotFather. Format <code>123456789:AAH…</code> — no spaces. Hodhod verifies via Telegram getMe and sets the webhook automatically.</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Approver Telegram ID <span class="text-slate-400 font-normal">(optional)</span></span>
+      <input name="approver_tg_id" class="form-input" placeholder="123456789">
+      <p class="form-hint">Numeric chat ID for payment/receipt notifications. Get yours from @userinfobot. Falls back to the agent's Telegram admin ID if empty.</p>
+    </label>
+    <button type="submit" class="btn btn-primary">Add bot</button>
   </form>
 </div>
 {{end}}

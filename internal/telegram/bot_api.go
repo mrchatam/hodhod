@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-telegram/bot"
@@ -17,23 +18,48 @@ import (
 // HTTPClient returns the shared outbound HTTP client.
 func (m *Manager) HTTPClient() *http.Client { return m.http }
 
+var botTokenRE = regexp.MustCompile(`^\d+:[A-Za-z0-9_-]+$`)
+
 // ValidateToken checks a bot token via getMe and returns the bot username.
 func ValidateToken(ctx context.Context, box *crypto.Box, token string, httpClient *http.Client) (string, error) {
+	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", fmt.Errorf("empty token")
 	}
+	if !botTokenRE.MatchString(token) {
+		return "", fmt.Errorf("invalid token format — use the token from @BotFather (e.g. 123456789:AAH…)")
+	}
 	api, err := bot.New(token, bot.WithHTTPClient(15, httpClient))
 	if err != nil {
-		return "", err
+		return "", FriendlyTokenError(err)
 	}
 	me, err := api.GetMe(ctx)
 	if err != nil {
-		return "", fmt.Errorf("invalid token: %w", err)
+		return "", FriendlyTokenError(err)
 	}
 	if me.Username == "" {
-		return "", fmt.Errorf("bot has no username")
+		return "", fmt.Errorf("bot has no @username — set one in @BotFather")
 	}
 	return me.Username, nil
+}
+
+// FriendlyTokenError maps Telegram API errors to user-facing messages.
+func FriendlyTokenError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "not found"), strings.Contains(msg, "404"):
+		return fmt.Errorf("invalid or revoked bot token — copy a fresh token from @BotFather")
+	case strings.Contains(msg, "timeout"), strings.Contains(msg, "connection refused"),
+		strings.Contains(msg, "no such host"), strings.Contains(msg, "network"):
+		return fmt.Errorf("cannot reach Telegram API — check server network or PROXY_URL")
+	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"):
+		return fmt.Errorf("invalid bot token — verify the token from @BotFather")
+	default:
+		return fmt.Errorf("could not verify bot token — %s", err.Error())
+	}
 }
 
 // WebhookInfo returns webhook URL and status for a bot.

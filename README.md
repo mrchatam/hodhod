@@ -25,9 +25,9 @@ duration, volume) within master limits.
 
 After login as **master**:
 
-1. **Panels** — add Marzban / 3x-ui panels, test connection
+1. **Panels** — add Marzban / 3x-ui panels, test connection (works without a bot for manual services)
 2. **Agents** — create sellers, set permissions, assign panels + quotas, create web login + reset password
-3. **Bots** — attach Telegram bots to agents (token validated via `getMe`)
+3. **Bots** *(optional)* — attach Telegram bots to agents for automated sales (token validated via `getMe`)
 
 After login as **agent** (seller):
 

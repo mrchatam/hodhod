@@ -82,6 +82,49 @@ func (s *Store) UpdatePanel(ctx context.Context, p *Panel) error {
 	return s.DB.WithContext(ctx).Save(p).Error
 }
 
+func (s *Store) CountAgentPanelsByPanel(ctx context.Context, panelID int64) (int64, error) {
+	var n int64
+	err := s.DB.WithContext(ctx).Model(&AgentPanel{}).Where("panel_id = ?", panelID).Count(&n).Error
+	return n, err
+}
+
+// PanelAgentRow is an agent assignment for a panel (master detail view).
+type PanelAgentRow struct {
+	AgentID   int64
+	AgentName string
+	MaxUsers  int
+	ExpiryCap int
+}
+
+func (s *Store) ListPanelAgentRows(ctx context.Context, panelID int64) ([]PanelAgentRow, error) {
+	var out []PanelAgentRow
+	err := s.DB.WithContext(ctx).
+		Table("agent_panels").
+		Select("agent_panels.agent_id, agents.name AS agent_name, agent_panels.max_users, agent_panels.expiry_cap_days AS expiry_cap").
+		Joins("JOIN agents ON agents.id = agent_panels.agent_id").
+		Where("agent_panels.panel_id = ?", panelID).
+		Scan(&out).Error
+	return out, err
+}
+
+// PanelBotRow is a bot assignment for a panel (master detail view).
+type PanelBotRow struct {
+	BotID       int64
+	BotUsername string
+	AgentID     int64
+}
+
+func (s *Store) ListPanelBotRows(ctx context.Context, panelID int64) ([]PanelBotRow, error) {
+	var out []PanelBotRow
+	err := s.DB.WithContext(ctx).
+		Table("bot_panels").
+		Select("bot_panels.bot_id, bots.username AS bot_username, bots.agent_id").
+		Joins("JOIN bots ON bots.id = bot_panels.bot_id").
+		Where("bot_panels.panel_id = ?", panelID).
+		Scan(&out).Error
+	return out, err
+}
+
 // --- Bots ---
 
 func (s *Store) ListActiveBots(ctx context.Context) ([]Bot, error) {

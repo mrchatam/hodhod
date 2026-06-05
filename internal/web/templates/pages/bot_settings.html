@@ -2,25 +2,61 @@
 <h2 class="text-2xl font-bold text-slate-900 mb-2">Bot @{{.Bot.Username}}</h2>
 <p class="text-sm text-slate-500 mb-2">Webhook (main domain): {{.WebhookURL}} · {{.WebhookStatus}}</p>
 {{if .AgentPublicURL}}<p class="text-sm text-slate-500 mb-4">Seller panel: {{.AgentPublicURL}}/login · Mini App: {{.AgentPublicURL}}/miniapp/index.html?bot={{.Bot.PublicID}}</p>{{end}}
-<form method="post" action="/master/bots/{{.Bot.ID}}/settings" class="bg-white rounded-xl border p-6 space-y-3 max-w-lg">
+<form method="post" action="/master/bots/{{.Bot.ID}}/settings" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <input name="token" type="password" placeholder="New token (leave empty to keep)" class="w-full border rounded-lg p-2">
-  <select name="status" class="w-full border rounded-lg p-2"><option value="active" {{if eq .Bot.Status "active"}}selected{{end}}>active</option><option value="disabled">disabled</option></select>
-  <input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" placeholder="Approver Telegram ID" class="w-full border rounded-lg p-2">
-  <input name="support_contact" value="{{index .Settings "support_contact"}}" placeholder="Support contact" class="w-full border rounded-lg p-2">
-  <textarea name="welcome_text" placeholder="Welcome message" class="w-full border rounded-lg p-2" rows="2">{{index .Settings "welcome_text"}}</textarea>
-  <textarea name="card_numbers" placeholder="Payment card numbers" class="w-full border rounded-lg p-2" rows="2">{{index .Settings "card_numbers"}}</textarea>
-  <input name="warn_percent" value="{{index .Settings "warn_percent"}}" placeholder="Usage warn %" class="w-full border rounded-lg p-2">
-  <input name="force_join_channel" value="{{index .Settings "force_join_channel"}}" placeholder="@channel to force join" class="w-full border rounded-lg p-2">
-  <input name="currency" value="{{index .Settings "currency"}}" placeholder="Currency label (e.g. Toman)" class="w-full border rounded-lg p-2">
-  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Save bot settings</button>
+  <label class="form-field">
+    <span class="form-label">New bot token</span>
+    <input name="token" type="password" class="form-input" placeholder="Leave empty to keep current">
+    <p class="form-hint">Paste a new token from @BotFather only when rotating the bot token.</p>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Status</span>
+    <select name="status" class="form-input"><option value="active" {{if eq .Bot.Status "active"}}selected{{end}}>active</option><option value="disabled">disabled</option></select>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Approver Telegram ID</span>
+    <input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123456789">
+    <p class="form-hint">Who receives payment approval requests. Get ID from @userinfobot. Overrides agent-level admin ID for this bot.</p>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Support contact</span>
+    <input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input" placeholder="@support or t.me/...">
+  </label>
+  <label class="form-field">
+    <span class="form-label">Welcome message</span>
+    <textarea name="welcome_text" class="form-input" rows="2">{{index .Settings "welcome_text"}}</textarea>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Payment card numbers</span>
+    <textarea name="card_numbers" class="form-input" rows="2">{{index .Settings "card_numbers"}}</textarea>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Usage warn %</span>
+    <input name="warn_percent" value="{{index .Settings "warn_percent"}}" class="form-input" placeholder="80">
+  </label>
+  <label class="form-field">
+    <span class="form-label">Force-join channel</span>
+    <input name="force_join_channel" value="{{index .Settings "force_join_channel"}}" class="form-input" placeholder="@yourchannel">
+  </label>
+  <label class="form-field">
+    <span class="form-label">Currency label</span>
+    <input name="currency" value="{{index .Settings "currency"}}" class="form-input" placeholder="Toman">
+  </label>
+  <button type="submit" class="btn btn-primary">Save bot settings</button>
 </form>
 <h3 class="text-lg font-semibold mt-8 mb-3">Panel assignment</h3>
-<ul class="text-sm space-y-1 mb-4">{{range .BotPanels}}<li class="bg-slate-50 p-2 rounded">Panel {{.PanelID}} · inbounds in scope</li>{{end}}</ul>
-<form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="bg-white rounded-xl border p-6 space-y-3 max-w-lg">
+<ul class="text-sm space-y-1 mb-4">{{range .BotPanels}}<li class="bg-slate-50 p-2 rounded">Panel {{.PanelID}} · inbounds in scope</li>{{else}}<li class="text-slate-400">No panels assigned to this bot.</li>{{end}}</ul>
+<form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <select name="panel_id" class="w-full border rounded-lg p-2">{{range .AgentPanels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
-  <input name="inbound_ids" placeholder="Inbound IDs (comma-separated)" class="w-full border rounded-lg p-2">
-  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Assign panel</button>
+  <label class="form-field">
+    <span class="form-label">Panel</span>
+    <select name="panel_id" class="form-input">{{range .AgentPanels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Inbound IDs</span>
+    <input name="inbound_ids" class="form-input" placeholder="1, 2, 3">
+    <p class="form-hint">Comma-separated inbound IDs (3x-ui). Leave empty for all inbounds on the panel.</p>
+  </label>
+  <button type="submit" class="btn btn-primary">Assign panel</button>
 </form>
 {{end}}

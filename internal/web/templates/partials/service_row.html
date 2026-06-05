@@ -4,15 +4,17 @@
   <td class="p-3 font-mono text-xs">{{.Svc.PanelUsername}}</td>
   <td class="p-3">{{gib .Svc.UsedBytes}} / {{gib .Svc.DataLimitBytes}}</td>
   <td class="p-3">{{date .Svc.ExpireAt}}</td>
-  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-xs {{if eq .Svc.Status "active"}}bg-emerald-100 text-emerald-700{{else}}bg-slate-100 text-slate-600{{end}}">{{.Svc.Status}}</span></td>
-  <td class="p-3 text-right space-x-1">
-    {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button class="text-brand-600 hover:underline text-xs">+30d</button></form>{{end}}
-    {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button class="text-brand-600 hover:underline text-xs">+10GB</button></form>{{end}}
-    {{if $.Perms.DisableEnable}}{{if eq .Svc.Status "active"}}<form class="inline" hx-post="/services/{{.Svc.ID}}/disable" hx-target="#svc-row-{{.Svc.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-amber-600 text-xs">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-emerald-600 text-xs">Enable</button></form>{{end}}{{end}}
-    {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-slate-600 text-xs">Reset</button></form>{{end}}
-    {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-red-600 text-xs">Delete</button></form>{{end}}
-    <button type="button" class="text-slate-500 text-xs" onclick="navigator.clipboard.writeText('{{.Svc.SubLink}}')">Copy</button>
-    <button type="button" class="text-slate-500 text-xs qr-btn" data-sub="{{.Svc.SubLink}}">QR</button>
+  <td class="p-3"><span class="badge {{if eq .Svc.Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Svc.Status}}</span></td>
+  <td class="p-3 text-right">
+    <div class="flex flex-wrap justify-end gap-1">
+    {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button type="submit" class="btn btn-secondary btn-sm">+30d</button></form>{{end}}
+    {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button type="submit" class="btn btn-secondary btn-sm">+10GB</button></form>{{end}}
+    {{if $.Perms.DisableEnable}}{{if eq .Svc.Status "active"}}<form class="inline" hx-post="/services/{{.Svc.ID}}/disable" hx-target="#svc-row-{{.Svc.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>{{end}}{{end}}
+    {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm">Reset</button></form>{{end}}
+    {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form>{{end}}
+    <button type="button" class="btn btn-muted btn-sm" onclick="navigator.clipboard.writeText('{{.Svc.SubLink}}')">Copy</button>
+    <button type="button" class="btn btn-muted btn-sm qr-btn" data-sub="{{.Svc.SubLink}}">QR</button>
+    </div>
   </td>
 </tr>
 {{end}}

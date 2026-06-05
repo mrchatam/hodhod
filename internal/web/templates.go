@@ -22,6 +22,7 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		"toman": formatToman,
 		"gib":   formatGiB,
 		"date":  formatDate,
+		"time":  formatTime,
 		"deref": derefInt64,
 	}
 	pages := make(map[string]*template.Template, len(pageNames))
@@ -69,6 +70,13 @@ func formatGiB(bytes int64) string {
 
 func formatDate(t *time.Time) string {
 	if t == nil || t.IsZero() {
+		return "-"
+	}
+	return t.Format("2006-01-02 15:04")
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
 		return "-"
 	}
 	return t.Format("2006-01-02 15:04")

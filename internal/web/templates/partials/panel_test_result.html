@@ -1,0 +1,7 @@
+{{define "panel_test_result"}}
+{{if .OK}}
+<div class="alert-ok">{{.Message}}</div>
+{{else}}
+<div class="alert-err">{{.Message}}</div>
+{{end}}
+{{end}}

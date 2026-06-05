@@ -1,17 +1,37 @@
 {{define "content"}}
 <h2 class="text-2xl font-bold text-slate-900 mb-2">Bot @{{.Bot.Username}}</h2>
 <p class="text-sm text-slate-500 mb-4">Webhook: {{.WebhookStatus}} · <span class="font-mono text-xs">{{.WebhookURL}}</span></p>
-<form method="post" action="/agent/bots/{{.Bot.ID}}/settings" class="bg-white rounded-xl border p-6 space-y-3 max-w-lg mt-4">
+<form method="post" action="/agent/bots/{{.Bot.ID}}/settings" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg mt-4">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" placeholder="Approver Telegram ID" class="w-full border rounded-lg p-2">
-  <input name="support_contact" value="{{index .Settings "support_contact"}}" placeholder="Support contact" class="w-full border rounded-lg p-2">
-  <textarea name="welcome_text" class="w-full border rounded-lg p-2" rows="2" placeholder="Welcome message">{{index .Settings "welcome_text"}}</textarea>
-  <textarea name="card_numbers" class="w-full border rounded-lg p-2" rows="2" placeholder="Card numbers for top-up">{{index .Settings "card_numbers"}}</textarea>
-  <input name="warn_percent" value="{{index .Settings "warn_percent"}}" placeholder="Usage warn %" class="w-full border rounded-lg p-2">
-  <input name="force_join_channel" value="{{index .Settings "force_join_channel"}}" placeholder="@channel to force join" class="w-full border rounded-lg p-2">
-  <label class="block text-sm font-medium">New bot token (optional)
-    <input name="token" type="password" class="mt-1 w-full border rounded-lg p-2" placeholder="Leave blank to keep current">
+  <label class="form-field">
+    <span class="form-label">Approver Telegram ID</span>
+    <input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123456789">
+    <p class="form-hint">Who receives payment approval requests. Get ID from @userinfobot.</p>
   </label>
-  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Save</button>
+  <label class="form-field">
+    <span class="form-label">Support contact</span>
+    <input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input">
+  </label>
+  <label class="form-field">
+    <span class="form-label">Welcome message</span>
+    <textarea name="welcome_text" class="form-input" rows="2">{{index .Settings "welcome_text"}}</textarea>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Card numbers for top-up</span>
+    <textarea name="card_numbers" class="form-input" rows="2">{{index .Settings "card_numbers"}}</textarea>
+  </label>
+  <label class="form-field">
+    <span class="form-label">Usage warn %</span>
+    <input name="warn_percent" value="{{index .Settings "warn_percent"}}" class="form-input">
+  </label>
+  <label class="form-field">
+    <span class="form-label">Force-join channel</span>
+    <input name="force_join_channel" value="{{index .Settings "force_join_channel"}}" class="form-input" placeholder="@channel">
+  </label>
+  <label class="form-field">
+    <span class="form-label">New bot token <span class="text-slate-400 font-normal">(optional)</span></span>
+    <input name="token" type="password" class="form-input" placeholder="Leave blank to keep current">
+  </label>
+  <button type="submit" class="btn btn-primary">Save</button>
 </form>
 {{end}}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -19,6 +20,10 @@ func (s *Server) pageAgents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) postAgent(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	a := &db.Agent{Name: r.FormValue("name"), Status: db.AgentActive}
+	if v := r.FormValue("tg_admin_id"); v != "" {
+		n, _ := strconv.ParseInt(v, 10, 64)
+		a.TgAdminID = &n
+	}
 	if err := s.Store.CreateAgent(r.Context(), a); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -119,6 +124,8 @@ func (s *Server) postAgentUpdate(w http.ResponseWriter, r *http.Request) {
 	if v := r.FormValue("tg_admin_id"); v != "" {
 		n, _ := strconv.ParseInt(v, 10, 64)
 		agent.TgAdminID = &n
+	} else {
+		agent.TgAdminID = nil
 	}
 	_ = s.Store.UpdateAgent(r.Context(), agent)
 	s.setFlash(w, "ok", "Agent saved")
@@ -196,7 +203,16 @@ func (s *Server) postAgentResetPassword(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) pagePanels(w http.ResponseWriter, r *http.Request) {
 	panels, _ := s.Store.ListPanels(r.Context())
-	s.renderPage(w, "panels", r, map[string]any{"Panels": panels})
+	type panelRow struct {
+		db.Panel
+		AgentCount int64
+	}
+	rows := make([]panelRow, 0, len(panels))
+	for _, p := range panels {
+		n, _ := s.Store.CountAgentPanelsByPanel(r.Context(), p.ID)
+		rows = append(rows, panelRow{Panel: p, AgentCount: n})
+	}
+	s.renderPage(w, "panels", r, map[string]any{"PanelRows": rows})
 }
 
 func (s *Server) postPanel(w http.ResponseWriter, r *http.Request) {
@@ -219,11 +235,22 @@ func (s *Server) postPanel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) testPanel(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err := s.Panels.TestConnection(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+	err := s.Panels.TestConnection(r.Context(), id)
+	ok, msg := panelTestMessage(err)
+	if err != nil {
+		admin := r.Context().Value(ctxAdmin).(*db.Admin)
+		s.audit(r, &admin.ID, "panel_test_fail", "panel", id, map[string]any{"error": err.Error()})
+	}
+	if r.Header.Get("HX-Request") != "" {
+		s.renderPartial(w, "panels", "panel_test_result", map[string]any{"OK": ok, "Message": msg})
 		return
 	}
-	w.Write([]byte("ok"))
+	if ok {
+		s.setFlash(w, "ok", msg)
+	} else {
+		s.setFlash(w, "err", msg)
+	}
+	http.Redirect(w, r, "/master/panels", http.StatusSeeOther)
 }
 
 func (s *Server) pageBots(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +277,8 @@ func (s *Server) postBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.postBotWithToken(r, agentID); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		s.setFlash(w, "err", err.Error())
+		http.Redirect(w, r, "/master/bots", http.StatusSeeOther)
 		return
 	}
 	s.setFlash(w, "ok", "Bot added")
@@ -296,20 +324,25 @@ func (s *Server) postBotSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if token := r.FormValue("token"); token != "" {
 		username, err := telegram.ValidateToken(r.Context(), s.Box, token, s.Telegram.HTTPClient())
-		if err == nil {
-			enc, _ := s.Box.Encrypt(token)
-			bot.TokenEnc = enc
-			bot.Username = username
-			_ = s.Store.UpdateBot(r.Context(), bot)
-			_ = s.Telegram.Reload(r.Context(), id)
+		if err != nil {
+			s.setFlash(w, "err", err.Error())
+			redirect := fmt.Sprintf("/master/bots/%d/settings", id)
+			if admin.Role == db.RoleAgent {
+				redirect = fmt.Sprintf("/agent/bots/%d/settings", id)
+			}
+			http.Redirect(w, r, redirect, http.StatusSeeOther)
+			return
 		}
+		enc, _ := s.Box.Encrypt(strings.TrimSpace(token))
+		bot.TokenEnc = enc
+		bot.Username = username
+		_ = s.Store.UpdateBot(r.Context(), bot)
+		_ = s.Telegram.Reload(r.Context(), id)
 	}
 	s.saveBotSettings(r, id)
-	redirect := "/master/bots"
+	redirect := fmt.Sprintf("/master/bots/%d/settings", id)
 	if admin.Role == db.RoleAgent {
 		redirect = fmt.Sprintf("/agent/bots/%d/settings", id)
-	} else {
-		redirect = fmt.Sprintf("/master/bots/%d/settings", id)
 	}
 	s.setFlash(w, "ok", "Settings saved")
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
@@ -331,7 +364,11 @@ func (s *Server) pagePanelEdit(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.renderPage(w, "panel_edit", r, map[string]any{"Panel": p})
+	agentRows, _ := s.Store.ListPanelAgentRows(r.Context(), id)
+	botRows, _ := s.Store.ListPanelBotRows(r.Context(), id)
+	s.renderPage(w, "panel_edit", r, map[string]any{
+		"Panel": p, "AgentRows": agentRows, "BotRows": botRows,
+	})
 }
 
 func (s *Server) postPanelUpdate(w http.ResponseWriter, r *http.Request) {
@@ -355,7 +392,7 @@ func (s *Server) postPanelUpdate(w http.ResponseWriter, r *http.Request) {
 	_ = s.Store.UpdatePanel(r.Context(), p)
 	s.Panels.Invalidate(id)
 	s.setFlash(w, "ok", "Panel updated")
-	http.Redirect(w, r, "/master/panels", http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d", id), http.StatusSeeOther)
 }
 
 func (s *Server) postPanelDisable(w http.ResponseWriter, r *http.Request) {

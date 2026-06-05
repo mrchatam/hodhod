@@ -2,15 +2,27 @@
 <h2 class="text-2xl font-bold text-slate-900 mb-6">My bots</h2>
 <div class="grid lg:grid-cols-2 gap-6">
   <div class="space-y-3">{{range .Bots}}
-  <div class="bg-white rounded-xl border p-4 flex justify-between">
+  <div class="bg-white rounded-xl border p-4 flex justify-between items-center">
     <div><p class="font-medium">@{{.Username}}</p><p class="text-xs text-slate-500">{{.Status}}</p></div>
-    <a href="/agent/bots/{{.ID}}/settings" class="text-brand-600 text-sm">Settings</a>
-  </div>{{end}}</div>
+    <a href="/agent/bots/{{.ID}}/settings" class="btn btn-secondary btn-sm">Settings</a>
+  </div>{{else}}
+  <p class="text-slate-400 text-sm">No bots yet.</p>
+  {{end}}</div>
   {{if .Perms.ManageBot}}
-  <form method="post" action="/agent/bots" class="bg-white rounded-xl border p-6 space-y-3 h-fit">
+  <form method="post" action="/agent/bots" class="bg-white rounded-xl border p-6 space-y-4 h-fit">
+    <h3 class="font-semibold text-slate-800">Add bot</h3>
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <input name="token" placeholder="Bot token" class="w-full border rounded-lg p-2" required>
-    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Add bot</button>
+    <label class="form-field">
+      <span class="form-label">Bot token</span>
+      <input name="token" class="form-input" placeholder="123456789:AAH..." required>
+      <p class="form-hint">From @BotFather. Format <code>123456789:AAH…</code> — no spaces.</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Approver Telegram ID <span class="text-slate-400 font-normal">(optional)</span></span>
+      <input name="approver_tg_id" class="form-input" placeholder="123456789">
+      <p class="form-hint">Numeric chat ID for payment notifications. Get yours from @userinfobot.</p>
+    </label>
+    <button type="submit" class="btn btn-primary">Add bot</button>
   </form>{{end}}
 </div>
 {{end}}

@@ -3,15 +3,29 @@
 <div class="grid lg:grid-cols-2 gap-6">
   <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <table class="w-full text-sm"><thead class="bg-slate-50"><tr><th class="p-3 text-left">Name</th><th class="p-3 text-left">Status</th><th class="p-3"></th></tr></thead>
-    <tbody>{{range .Agents}}<tr class="border-t"><td class="p-3">{{.Name}}</td><td class="p-3">{{.Status}}</td><td class="p-3"><a href="/master/agents/{{.ID}}" class="text-brand-600 text-xs">Manage</a></td></tr>{{end}}</tbody></table>
+    <tbody>{{range .Agents}}<tr class="border-t"><td class="p-3">{{.Name}}</td><td class="p-3">{{.Status}}</td><td class="p-3"><a href="/master/agents/{{.ID}}" class="btn btn-secondary btn-sm">Manage</a></td></tr>{{end}}</tbody></table>
   </div>
-  <form method="post" action="/master/agents" class="bg-white rounded-xl border border-slate-200 p-6 space-y-3 h-fit">
+  <form method="post" action="/master/agents" class="bg-white rounded-xl border border-slate-200 p-6 space-y-4 h-fit">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <h3 class="font-semibold">New agent</h3>
-    <input name="name" placeholder="Agent name" class="w-full border rounded-lg p-2" required>
-    <input name="login_username" placeholder="Web login username" class="w-full border rounded-lg p-2">
-    <input name="login_password" type="password" placeholder="Web login password" class="w-full border rounded-lg p-2">
-    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Create</button>
+    <label class="form-field">
+      <span class="form-label">Agent name</span>
+      <input name="name" class="form-input" required>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Web login username</span>
+      <input name="login_username" class="form-input">
+    </label>
+    <label class="form-field">
+      <span class="form-label">Web login password</span>
+      <input name="login_password" type="password" class="form-input">
+    </label>
+    <label class="form-field">
+      <span class="form-label">Telegram admin ID <span class="text-slate-400 font-normal">(optional)</span></span>
+      <input name="tg_admin_id" class="form-input" placeholder="123456789">
+      <p class="form-hint">Default approver for payment notifications across this agent's bots. Get ID from @userinfobot.</p>
+    </label>
+    <button type="submit" class="btn btn-primary">Create</button>
   </form>
 </div>
 {{end}}

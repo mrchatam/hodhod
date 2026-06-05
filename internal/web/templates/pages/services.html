@@ -2,21 +2,21 @@
 <div class="flex items-center justify-between mb-6">
   <h2 class="text-2xl font-bold text-slate-900">Services</h2>
   {{if or .IsMaster .Perms.CreateUser}}
-  <a href="/services/new" class="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-brand-700">+ Create user</a>
+  <a href="/services/new" class="btn btn-primary btn-sm">+ Create user</a>
   {{end}}
 </div>
 <form method="get" action="/services" class="mb-4 flex gap-2 flex-wrap">
-  <input name="q" value="{{.Query}}" placeholder="Search label or username" class="border rounded-lg px-3 py-2 text-sm">
-  <select name="status" class="border rounded-lg px-3 py-2 text-sm">
+  <input name="q" value="{{.Query}}" placeholder="Search label or username" class="form-input max-w-xs">
+  <select name="status" class="form-input max-w-[10rem]">
     <option value="">All statuses</option>
     <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>active</option>
     <option value="disabled" {{if eq .StatusFilter "disabled"}}selected{{end}}>disabled</option>
     <option value="expired" {{if eq .StatusFilter "expired"}}selected{{end}}>expired</option>
   </select>
-  <button class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Filter</button>
+  <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
 </form>
 <div id="qr-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white p-6 rounded-xl"><canvas id="qr-canvas"></canvas><button onclick="document.getElementById('qr-modal').classList.add('hidden')" class="block mt-3 text-sm text-slate-600">Close</button></div>
+  <div class="bg-white p-6 rounded-xl"><canvas id="qr-canvas"></canvas><button type="button" onclick="document.getElementById('qr-modal').classList.add('hidden')" class="btn btn-muted mt-3">Close</button></div>
 </div>
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
   <table class="w-full text-sm">
@@ -37,15 +37,17 @@
       <td class="p-3 font-mono text-xs">{{.PanelUsername}}</td>
       <td class="p-3">{{gib .UsedBytes}} / {{gib .DataLimitBytes}}</td>
       <td class="p-3">{{date .ExpireAt}}</td>
-      <td class="p-3"><span class="px-2 py-0.5 rounded-full text-xs {{if eq .Status "active"}}bg-emerald-100 text-emerald-700{{else}}bg-slate-100 text-slate-600{{end}}">{{.Status}}</span></td>
-      <td class="p-3 text-right space-x-1">
-        {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button class="text-brand-600 hover:underline text-xs">+30d</button></form>{{end}}
-        {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button class="text-brand-600 hover:underline text-xs">+10GB</button></form>{{end}}
-        {{if $.Perms.DisableEnable}}{{if eq .Status "active"}}<form class="inline" hx-post="/services/{{.ID}}/disable" hx-target="#svc-row-{{.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-amber-600 text-xs">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-emerald-600 text-xs">Enable</button></form>{{end}}{{end}}
-        {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-slate-600 text-xs">Reset</button></form>{{end}}
-        {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-red-600 text-xs">Delete</button></form>{{end}}
-        <button type="button" class="text-slate-500 text-xs" onclick="navigator.clipboard.writeText('{{.SubLink}}')">Copy</button>
-        <button type="button" class="text-slate-500 text-xs qr-btn" data-sub="{{.SubLink}}">QR</button>
+      <td class="p-3"><span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Status}}</span></td>
+      <td class="p-3 text-right">
+        <div class="flex flex-wrap justify-end gap-1">
+        {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button type="submit" class="btn btn-secondary btn-sm">+30d</button></form>{{end}}
+        {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button type="submit" class="btn btn-secondary btn-sm">+10GB</button></form>{{end}}
+        {{if $.Perms.DisableEnable}}{{if eq .Status "active"}}<form class="inline" hx-post="/services/{{.ID}}/disable" hx-target="#svc-row-{{.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>{{end}}{{end}}
+        {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm">Reset</button></form>{{end}}
+        {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form>{{end}}
+        <button type="button" class="btn btn-muted btn-sm" onclick="navigator.clipboard.writeText('{{.SubLink}}')">Copy</button>
+        <button type="button" class="btn btn-muted btn-sm qr-btn" data-sub="{{.SubLink}}">QR</button>
+        </div>
       </td>
     </tr>
     {{else}}

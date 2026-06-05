@@ -40,6 +40,25 @@ func (s *Server) renderPage(w http.ResponseWriter, page string, r *http.Request,
 	}
 }
 
+func (s *Server) renderPartial(w http.ResponseWriter, page, partial string, data map[string]any) {
+	t, ok := s.pages[page]
+	if !ok {
+		http.Error(w, "unknown page", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := t.ExecuteTemplate(w, partial, data); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
+}
+
+func panelTestMessage(err error) (ok bool, msg string) {
+	if err == nil {
+		return true, "Connection OK — panel credentials accepted."
+	}
+	return false, "Connection failed — check URL, path, username, and password."
+}
+
 func (s *Server) permsFor(r *http.Request, admin *db.Admin) (*db.AgentPermissions, error) {
 	if admin.Role == db.RoleMaster {
 		return &db.AgentPermissions{CreateUser: true, ModifyUser: true, AddTime: true, AddVolume: true,

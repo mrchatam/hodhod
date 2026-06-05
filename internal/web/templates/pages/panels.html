@@ -1,25 +1,94 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">VPN Panels</h2>
+<h2 class="text-2xl font-bold text-slate-900 mb-2">VPN Panels</h2>
+<p class="text-sm text-slate-500 mb-6">Panels can be used for manual user creation without a Telegram bot. Assign panels to agents after adding them.</p>
 <div class="grid lg:grid-cols-2 gap-6">
-  <div class="space-y-3">{{range .Panels}}
-  <div class="bg-white rounded-xl border p-4 flex justify-between items-center">
-    <div><p class="font-medium">{{.Name}} <span class="text-xs text-slate-400">{{.Status}}</span></p><p class="text-xs text-slate-500">{{.Type}} · {{.BaseURL}}</p></div>
-    <div class="space-x-2 text-sm">
-      <a href="/master/panels/{{.ID}}" class="text-brand-600">Edit</a>
-      <form class="inline" method="post" action="/master/panels/{{.ID}}/test"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-brand-600">Test</button></form>
-      {{if eq .Status "active"}}<form class="inline" method="post" action="/master/panels/{{.ID}}/disable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-red-600">Disable</button></form>{{end}}
+  <div class="space-y-3">{{range .PanelRows}}
+  <div class="bg-white rounded-xl border p-4">
+    <div class="flex justify-between items-start gap-4">
+      <div>
+        <p class="font-medium">{{.Name}}
+          <span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}} ml-1">{{.Status}}</span>
+        </p>
+        <p class="text-xs text-slate-500 mt-1">{{.Type}} · {{.BaseURL}}{{if .BasePath}}{{.BasePath}}{{end}}</p>
+        <p class="text-xs text-slate-400 mt-1">{{.AgentCount}} agent(s) assigned</p>
+      </div>
+      <div class="flex flex-wrap gap-2 shrink-0">
+        <a href="/master/panels/{{.ID}}" class="btn btn-secondary btn-sm">Edit</a>
+        <form class="inline" hx-post="/master/panels/{{.ID}}/test" hx-target="#panel-test-{{.ID}}" hx-swap="innerHTML">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-secondary btn-sm">Test</button>
+        </form>
+        {{if eq .Status "active"}}
+        <form class="inline" method="post" action="/master/panels/{{.ID}}/disable" onsubmit="return confirm('Disable this panel?')">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-danger btn-sm">Disable</button>
+        </form>
+        {{end}}
+      </div>
     </div>
-  </div>{{end}}</div>
-  <form method="post" action="/master/panels" class="bg-white rounded-xl border p-6 space-y-3 h-fit">
+    <div id="panel-test-{{.ID}}" class="mt-2"></div>
+  </div>{{else}}
+  <p class="text-slate-400 text-sm">No panels yet — add one using the form.</p>
+  {{end}}</div>
+
+  <form method="post" action="/master/panels" id="panel-add-form" class="bg-white rounded-xl border p-6 space-y-4 h-fit">
+    <h3 class="font-semibold text-slate-800">Add panel</h3>
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <input name="name" placeholder="Name" class="w-full border rounded-lg p-2" required>
-    <select name="type" class="w-full border rounded-lg p-2"><option value="marzban">Marzban</option><option value="xui">3x-ui</option></select>
-    <input name="base_url" placeholder="Base URL" class="w-full border rounded-lg p-2" required>
-    <input name="base_path" placeholder="Base path (xui)" class="w-full border rounded-lg p-2">
-    <input name="username" placeholder="Username" class="w-full border rounded-lg p-2" required>
-    <input name="password" type="password" placeholder="Password" class="w-full border rounded-lg p-2" required>
-    <input name="api_token" type="password" placeholder="API token (xui, optional)" class="w-full border rounded-lg p-2">
-    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Add panel</button>
+    <label class="form-field">
+      <span class="form-label">Name</span>
+      <input name="name" class="form-input" placeholder="Production Marzban" required>
+      <p class="form-hint">A label for your reference (e.g. main server, EU node).</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Panel type</span>
+      <select name="type" id="panel-type" class="form-input">
+        <option value="marzban">Marzban</option>
+        <option value="xui">3x-ui</option>
+      </select>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Base URL</span>
+      <input name="base_url" id="panel-base-url" class="form-input" placeholder="https://panel.example.com" required>
+      <p class="form-hint" id="hint-base-url">Marzban: <code>https://panel.example.com</code> — include <code>https://</code>, no trailing slash. Put non-standard port in the URL.<br>3x-ui: <code>https://host:2053</code> — port is part of the URL.</p>
+    </label>
+    <label class="form-field xui-field">
+      <span class="form-label">Base path <span class="text-slate-400 font-normal">(3x-ui only)</span></span>
+      <input name="base_path" id="panel-base-path" class="form-input" placeholder="/a1b2c3d4">
+      <p class="form-hint">Random path prefix from your 3x-ui install, e.g. <code>/xY9kL2mN</code>. Leave empty for Marzban.</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Username</span>
+      <input name="username" class="form-input" required>
+      <p class="form-hint">Panel admin username (3x-ui session login or Marzban admin).</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Password</span>
+      <input name="password" type="password" class="form-input" required>
+    </label>
+    <label class="form-field xui-field">
+      <span class="form-label">API token <span class="text-slate-400 font-normal">(3x-ui, optional)</span></span>
+      <input name="api_token" type="password" class="form-input">
+      <p class="form-hint">Optional if username/password auth works. Marzban does not use an API token.</p>
+    </label>
+    <button type="submit" class="btn btn-primary">Add panel</button>
   </form>
 </div>
+<script>
+(function() {
+  var sel = document.getElementById('panel-type');
+  var hint = document.getElementById('hint-base-url');
+  function sync() {
+    var xui = sel && sel.value === 'xui';
+    document.querySelectorAll('.xui-field').forEach(function(el) {
+      el.style.display = xui ? '' : 'none';
+    });
+    if (hint) {
+      hint.innerHTML = xui
+        ? '3x-ui: <code>https://host:2053</code> — include scheme and port in the URL, no trailing slash.'
+        : 'Marzban: <code>https://panel.example.com</code> — include <code>https://</code>, no trailing slash. Put non-standard port in the URL.';
+    }
+  }
+  if (sel) { sel.addEventListener('change', sync); sync(); }
+})();
+</script>
 {{end}}
