@@ -1,0 +1,18 @@
+{{define "content"}}
+<h2 class="text-2xl font-bold text-slate-900 mb-6">Bots</h2>
+<div class="grid lg:grid-cols-2 gap-6">
+  <div class="space-y-3">{{range .Bots}}
+  <div class="bg-white rounded-xl border p-4">
+    <p class="font-medium">@{{.Username}} <span class="text-xs text-slate-400">{{.PublicID}}</span></p>
+    <p class="text-xs text-slate-500">Agent {{.AgentID}} · {{.Status}}</p>
+    <a href="/master/bots/{{.ID}}/settings" class="text-brand-600 text-sm">Settings</a>
+  </div>{{end}}</div>
+  <form method="post" action="/master/bots" class="bg-white rounded-xl border p-6 space-y-3 h-fit">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <select name="agent_id" class="w-full border rounded-lg p-2">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+    <input name="token" placeholder="Bot token from @BotFather" class="w-full border rounded-lg p-2" required>
+    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Add bot</button>
+    <p class="text-xs text-slate-500">Username is fetched via getMe; webhook is set automatically.</p>
+  </form>
+</div>
+{{end}}

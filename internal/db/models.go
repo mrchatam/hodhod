@@ -25,8 +25,97 @@ type Agent struct {
 	MaxBots           int         `gorm:"not null;default:5"`
 	PriceFloorToman   int64       `gorm:"not null;default:0"`
 	PriceCeilingToman int64       `gorm:"not null;default:999999999"`
+	CustomDomain      string      `gorm:"uniqueIndex"`
+	DomainEnabled     bool        `gorm:"not null;default:false"`
+	DomainVerifiedAt  *time.Time
+	DomainVerifyToken string `gorm:"not null;default:''"`
 	CreatedAt         time.Time
 }
+
+// AgentPermissions are granular seller capabilities set by master.
+type AgentPermissions struct {
+	AgentID       int64 `gorm:"primaryKey"`
+	CreateUser    bool  `gorm:"not null;default:false"`
+	ModifyUser    bool  `gorm:"not null;default:false"`
+	AddTime       bool  `gorm:"not null;default:false"`
+	AddVolume     bool  `gorm:"not null;default:false"`
+	ResetUsage    bool  `gorm:"not null;default:false"`
+	DisableEnable bool  `gorm:"not null;default:false"`
+	DeleteUser    bool  `gorm:"not null;default:false"`
+	ManageBot     bool  `gorm:"not null;default:false"`
+	ManagePlans   bool  `gorm:"not null;default:false"`
+	ViewOnly      bool  `gorm:"not null;default:true"`
+}
+
+// Perm names for permission checks.
+type Perm string
+
+const (
+	PermCreateUser    Perm = "create_user"
+	PermModifyUser    Perm = "modify_user"
+	PermAddTime       Perm = "add_time"
+	PermAddVolume     Perm = "add_volume"
+	PermResetUsage    Perm = "reset_usage"
+	PermDisableEnable Perm = "disable_enable"
+	PermDeleteUser    Perm = "delete_user"
+	PermManageBot     Perm = "manage_bot"
+	PermManagePlans   Perm = "manage_plans"
+)
+
+func (p *AgentPermissions) Has(perm Perm) bool {
+	if p == nil {
+		return false
+	}
+	switch perm {
+	case PermCreateUser:
+		return p.CreateUser
+	case PermModifyUser:
+		return p.ModifyUser
+	case PermAddTime:
+		return p.AddTime
+	case PermAddVolume:
+		return p.AddVolume
+	case PermResetUsage:
+		return p.ResetUsage
+	case PermDisableEnable:
+		return p.DisableEnable
+	case PermDeleteUser:
+		return p.DeleteUser
+	case PermManageBot:
+		return p.ManageBot
+	case PermManagePlans:
+		return p.ManagePlans
+	default:
+		return false
+	}
+}
+
+// AgentPanel assigns a panel + scope + quota to a seller.
+type AgentPanel struct {
+	ID            int64          `gorm:"primaryKey"`
+	AgentID       int64          `gorm:"not null;uniqueIndex:idx_agent_panel"`
+	PanelID       int64          `gorm:"not null;uniqueIndex:idx_agent_panel"`
+	ScopeJSON     datatypes.JSON `gorm:"type:jsonb;default:'{}'"`
+	QuotaBytes    int64          `gorm:"not null;default:0"`
+	MaxUsers      int            `gorm:"not null;default:0"`
+	ExpiryCapDays int            `gorm:"not null;default:0"`
+}
+
+// Customer groups manual panel services for a seller.
+type Customer struct {
+	ID        int64  `gorm:"primaryKey"`
+	AgentID   int64  `gorm:"not null;index"`
+	Label     string `gorm:"not null;default:''"`
+	Contact   string `gorm:"not null;default:''"`
+	CreatedAt time.Time
+}
+
+type ServiceSource string
+
+const (
+	ServiceSourceBot   ServiceSource = "bot"
+	ServiceSourcePanel ServiceSource = "panel"
+)
 
 type AdminRole string
 
@@ -181,10 +270,15 @@ type WalletTx struct {
 }
 
 type Service struct {
-	ID                int64 `gorm:"primaryKey"`
-	BotID             int64 `gorm:"not null;index"`
-	EndUserID         int64 `gorm:"not null"`
+	ID                int64  `gorm:"primaryKey"`
+	AgentID           int64  `gorm:"not null;index"`
+	BotID             *int64 `gorm:"index"`
+	EndUserID         *int64
+	CustomerID        *int64
 	OrderID           *int64
+	Source            ServiceSource `gorm:"not null;default:bot"`
+	Label             string        `gorm:"not null;default:''"`
+	CreatedByAdminID  *int64
 	PanelID           int64  `gorm:"not null"`
 	PanelUsername     string `gorm:"not null"`
 	SubLink           string `gorm:"not null;default:''"`

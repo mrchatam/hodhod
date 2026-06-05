@@ -1,0 +1,12 @@
+DROP INDEX IF EXISTS idx_services_agent;
+ALTER TABLE services DROP CONSTRAINT IF EXISTS services_source_check;
+ALTER TABLE services DROP COLUMN IF EXISTS created_by_admin_id;
+ALTER TABLE services DROP COLUMN IF EXISTS customer_id;
+ALTER TABLE services DROP COLUMN IF EXISTS label;
+ALTER TABLE services DROP COLUMN IF EXISTS source;
+ALTER TABLE services DROP COLUMN IF EXISTS agent_id;
+ALTER TABLE services ALTER COLUMN end_user_id SET NOT NULL;
+ALTER TABLE services ALTER COLUMN bot_id SET NOT NULL;
+DROP TABLE IF EXISTS agent_panels;
+DROP TABLE IF EXISTS agent_permissions;
+DROP TABLE IF EXISTS customers;

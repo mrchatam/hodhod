@@ -45,15 +45,33 @@ type UserInfo struct {
 	Raw             map[string]any
 }
 
+// UpdateUserRequest carries optional fields for modifying a panel user.
+type UpdateUserRequest struct {
+	DataLimitBytes *int64
+	ExpireAt       *time.Time
+	AddBytes       int64
+	AddDays        int
+	Enabled        *bool
+}
+
+// InboundInfo describes a panel inbound for scope selection.
+type InboundInfo struct {
+	ID   int
+	Tag  string
+	Port int
+}
+
 // Client is the panel adapter contract.
 type Client interface {
 	CreateUser(ctx context.Context, req CreateUserRequest) (*UserInfo, error)
 	GetUser(ctx context.Context, username string) (*UserInfo, error)
+	UpdateUser(ctx context.Context, username string, req UpdateUserRequest) (*UserInfo, error)
 	ResetUsage(ctx context.Context, username string) error
 	Disable(ctx context.Context, username string) error
 	Enable(ctx context.Context, username string) error
 	DeleteUser(ctx context.Context, username string) error
 	SubscriptionURL(ctx context.Context, username string) (string, error)
+	ListInbounds(ctx context.Context) ([]InboundInfo, error)
 	Kind() PanelKind
 	TestConnection(ctx context.Context) error
 }

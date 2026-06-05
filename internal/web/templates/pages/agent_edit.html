@@ -1,0 +1,62 @@
+{{define "content"}}
+<h2 class="text-2xl font-bold text-slate-900 mb-2">{{.Agent.Name}}</h2>
+<p class="text-sm text-slate-500 mb-6">Agent settings, permissions, and panel assignment</p>
+<div class="grid lg:grid-cols-2 gap-6">
+  <form method="post" action="/master/agents/{{.Agent.ID}}" class="bg-white rounded-xl border p-6 space-y-3">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <input name="name" value="{{.Agent.Name}}" class="w-full border rounded-lg p-2" required>
+    <input name="tg_admin_id" value="{{if .Agent.TgAdminID}}{{deref .Agent.TgAdminID}}{{end}}" placeholder="Telegram admin ID" class="w-full border rounded-lg p-2">
+    <input name="max_bots" type="number" value="{{.Agent.MaxBots}}" class="w-full border rounded-lg p-2">
+    <input name="price_floor" type="number" value="{{.Agent.PriceFloorToman}}" placeholder="Price floor" class="w-full border rounded-lg p-2">
+    <input name="price_ceiling" type="number" value="{{.Agent.PriceCeilingToman}}" placeholder="Price ceiling" class="w-full border rounded-lg p-2">
+    <select name="status" class="w-full border rounded-lg p-2"><option value="active" {{if eq .Agent.Status "active"}}selected{{end}}>active</option><option value="disabled">disabled</option></select>
+    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Save</button>
+  </form>
+  <form method="post" action="/master/agents/{{.Agent.ID}}/permissions" class="bg-white rounded-xl border p-6 space-y-2 text-sm">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <h3 class="font-semibold mb-2">Permissions</h3>
+    {{range .PermFields}}<label class="flex items-center gap-2"><input type="checkbox" name="{{.Key}}" {{if .Checked}}checked{{end}}> {{.Label}}</label>{{end}}
+    <button class="mt-3 bg-brand-600 text-white px-4 py-2 rounded-lg">Save permissions</button>
+  </form>
+</div>
+<h3 class="text-lg font-semibold mt-8 mb-4">Assigned panels</h3>
+<form method="post" action="/master/agents/{{.Agent.ID}}/panels" class="bg-white rounded-xl border p-6 space-y-3 max-w-lg">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <select name="panel_id" class="w-full border rounded-lg p-2">
+    {{range .PanelRows}}
+    <option value="{{.Panel.ID}}">{{.Panel.Name}}{{if .Inbounds}} ({{len .Inbounds}} inbounds){{end}}</option>
+    {{end}}
+  </select>
+  <p class="text-xs text-slate-500">Discovered inbounds (xui): {{range .PanelRows}}{{range .Inbounds}}<span class="inline-block bg-slate-100 px-1 rounded mr-1">{{.ID}}:{{.Tag}}</span>{{end}}{{end}}</p>
+  <input name="max_users" type="number" placeholder="Max users (0=unlimited)" class="w-full border rounded-lg p-2">
+  <input name="expiry_cap_days" type="number" placeholder="Max duration days" class="w-full border rounded-lg p-2">
+  <input name="inbound_ids" placeholder="Inbound IDs (comma-separated, xui)" class="w-full border rounded-lg p-2">
+  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Assign panel</button>
+</form>
+<ul class="mt-4 space-y-2">{{range .AgentPanels}}<li class="text-sm bg-slate-50 p-3 rounded-lg">Panel {{.PanelID}} · max {{.MaxUsers}} users · cap {{.ExpiryCapDays}}d</li>{{end}}</ul>
+{{if .AgentAdmin}}
+<p class="mt-6 text-sm">Login: <strong>{{.AgentAdmin.Username}}</strong>
+<form class="inline" method="post" action="/master/agents/{{.Agent.ID}}/reset-password"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input name="password" type="password" placeholder="New password" class="border rounded p-1 text-sm"><button class="text-brand-600 text-sm">Reset</button></form></p>
+{{end}}
+<h3 class="text-lg font-semibold mt-8 mb-4">Custom domain</h3>
+<div class="bg-white rounded-xl border p-6 max-w-lg space-y-3">
+  <form method="post" action="/master/agents/{{.Agent.ID}}/domain" class="space-y-2">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <input name="custom_domain" value="{{.Agent.CustomDomain}}" placeholder="shop.example.com" class="w-full border rounded-lg p-2">
+    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm">Save domain</button>
+  </form>
+  {{if .Agent.CustomDomain}}
+  <p class="text-xs text-slate-600">Verify DNS — add TXT <code>_hodhod-verify.{{.Agent.CustomDomain}}</code> = <code>{{.Agent.DomainVerifyToken}}</code></p>
+  <p class="text-xs text-slate-600">Or CNAME <code>{{.Agent.CustomDomain}}</code> → <code>{{.PlatformHost}}</code></p>
+  <form method="post" action="/master/agents/{{.Agent.ID}}/verify-domain"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="text-brand-600 text-sm">Verify DNS</button></form>
+  {{if .Agent.DomainVerifiedAt}}
+  <p class="text-sm text-emerald-700">Verified · Panel URL: {{.AgentPublicURL}}/login</p>
+  <form method="post" action="/master/agents/{{.Agent.ID}}/domain-toggle" class="inline">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <input type="hidden" name="enable" value="{{if .Agent.DomainEnabled}}0{{else}}1{{end}}">
+    <button class="text-sm {{if .Agent.DomainEnabled}}text-red-600{{else}}text-brand-600{{end}}">{{if .Agent.DomainEnabled}}Disable{{else}}Enable{{end}} domain</button>
+  </form>
+  {{end}}
+  {{end}}
+</div>
+{{end}}

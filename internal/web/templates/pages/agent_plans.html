@@ -1,0 +1,44 @@
+{{define "content"}}
+<h2 class="text-2xl font-bold text-slate-900 mb-6">Plans</h2>
+<div class="grid lg:grid-cols-2 gap-6">
+  <div class="bg-white rounded-xl border overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50"><tr><th class="p-3 text-left">Name</th><th class="p-3">GB</th><th class="p-3">Days</th><th class="p-3">Price</th><th class="p-3"></th></tr></thead>
+      <tbody>
+      {{range .Plans}}
+      <tr class="border-t">
+        <td class="p-3">{{.Name}} <span class="text-xs text-slate-400">{{.Status}}</span></td>
+        <td class="p-3 text-center">{{.VolumeGB}}</td>
+        <td class="p-3 text-center">{{.DurationDays}}</td>
+        <td class="p-3 text-center">{{toman .PriceToman}} Toman</td>
+        <td class="p-3 text-right">
+          <details><summary class="text-brand-600 cursor-pointer text-xs">Edit</summary>
+          <form method="post" action="/agent/plans/{{.ID}}" class="mt-2 space-y-1 text-left">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="bot_id" value="{{.BotID}}">
+            <input name="name" value="{{.Name}}" class="w-full border rounded p-1 text-xs">
+            <input name="volume_gb" type="number" value="{{.VolumeGB}}" class="w-full border rounded p-1 text-xs">
+            <input name="duration_days" type="number" value="{{.DurationDays}}" class="w-full border rounded p-1 text-xs">
+            <input name="price_toman" type="number" value="{{.PriceToman}}" class="w-full border rounded p-1 text-xs">
+            <button class="text-xs text-brand-600">Save</button>
+          </form>
+          {{if eq .Status "active"}}<form method="post" action="/agent/plans/{{.ID}}/disable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="bot_id" value="{{.BotID}}"><button class="text-xs text-red-600">Disable</button></form>{{end}}
+          </details>
+        </td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  <form method="post" action="/agent/plans" class="bg-white rounded-xl border p-6 space-y-3 h-fit">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <select name="bot_id" class="w-full border rounded-lg p-2">{{range .Bots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}</select>
+    <select name="panel_id" class="w-full border rounded-lg p-2">{{range .PanelOptions}}<option value="{{.PanelID}}">Bot {{.BotID}} → {{.PanelName}}</option>{{end}}</select>
+    <input name="name" placeholder="Plan name" class="w-full border rounded-lg p-2" required>
+    <input name="volume_gb" type="number" placeholder="Volume GB" class="w-full border rounded-lg p-2" required>
+    <input name="duration_days" type="number" placeholder="Duration days" class="w-full border rounded-lg p-2" required>
+    <input name="price_toman" type="number" placeholder="Price (Toman)" class="w-full border rounded-lg p-2" required>
+    <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Add plan</button>
+  </form>
+</div>
+{{end}}

@@ -29,6 +29,7 @@ var messages = map[string]map[string]string{
 		"usage_warn":           "هشدار: %d%% از حجم سرویس مصرف شده است.",
 		"service_expiring":     "سرویس شما به زودی منقضی می‌شود.",
 		"service_expired":      "سرویس شما منقضی شده است.",
+		"force_join_required":  "برای استفاده از ربات ابتدا در کانال %s عضو شوید.",
 	},
 	"en": {
 		"start_welcome":        "Welcome to the VPN sales bot.",
@@ -56,6 +57,7 @@ var messages = map[string]map[string]string{
 		"usage_warn":           "Warning: %d%% of your service data has been used.",
 		"service_expiring":     "Your service is expiring soon.",
 		"service_expired":      "Your service has expired.",
+		"force_join_required":  "Please join %s before using this bot.",
 	},
 }
 

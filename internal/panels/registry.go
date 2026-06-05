@@ -88,6 +88,16 @@ func (r *Registry) Invalidate(panelID int64) {
 	r.mu.Unlock()
 }
 
+// InjectClient installs a prebuilt client (tests only).
+func (r *Registry) InjectClient(panelID int64, c Client) {
+	r.mu.Lock()
+	if r.cache == nil {
+		r.cache = make(map[int64]Client)
+	}
+	r.cache[panelID] = c
+	r.mu.Unlock()
+}
+
 // TestConnection verifies panel credentials.
 func (r *Registry) TestConnection(ctx context.Context, panelID int64) error {
 	c, err := r.Get(ctx, panelID)

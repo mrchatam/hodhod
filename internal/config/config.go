@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -24,6 +26,7 @@ type Config struct {
 	MasterPassword     string `env:"MASTER_PASSWORD,required"`
 	CronUsagePoll      string `env:"CRON_USAGE_POLL" envDefault:"@every 5m"`
 	CronExpiryCheck    string `env:"CRON_EXPIRY_CHECK" envDefault:"@every 1h"`
+	AllowCustomDomains bool   `env:"ALLOW_CUSTOM_DOMAINS" envDefault:"true"`
 }
 
 // Load reads .env (if present) and parses environment into Config.
@@ -65,4 +68,17 @@ func (c *Config) validate() error {
 
 func (c *Config) IsDev() bool {
 	return c.Env == "development" || c.Env == "dev"
+}
+
+// MainHost returns the hostname from PublicBaseURL for host routing.
+func (c *Config) MainHost() string {
+	u, err := url.Parse(c.PublicBaseURL)
+	if err != nil || u.Host == "" {
+		return strings.TrimPrefix(strings.TrimPrefix(c.PublicBaseURL, "https://"), "http://")
+	}
+	host := u.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.ToLower(host)
 }

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -67,32 +68,38 @@ func (r *Runner) pollUsage(ctx context.Context) {
 				continue
 			}
 			svc.UsedBytes = info.UsedBytes
-			_ = r.Store.UpdateService(ctx, svc.BotID, &svc)
+			_ = r.Store.UpdateServiceByID(ctx, &svc)
 			r.maybeWarn(ctx, &svc)
 		}
 	}
 }
 
 func (r *Runner) maybeWarn(ctx context.Context, svc *db.Service) {
-	if svc.DataLimitBytes <= 0 {
+	if svc.DataLimitBytes <= 0 || svc.BotID == nil || svc.EndUserID == nil {
 		return
 	}
-	user, err := r.Store.GetEndUser(ctx, svc.BotID, svc.EndUserID)
+	user, err := r.Store.GetEndUser(ctx, *svc.BotID, *svc.EndUserID)
 	if err != nil {
 		return
 	}
+	threshold := user.WarnPercent
+	if v, _ := r.Store.GetSetting(ctx, "bot", *svc.BotID, "warn_percent"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			threshold = n
+		}
+	}
 	pct := int(svc.UsedBytes * 100 / svc.DataLimitBytes)
-	if pct < user.WarnPercent || pct <= svc.LastWarnedPercent {
+	if pct < threshold || pct <= svc.LastWarnedPercent {
 		return
 	}
-	bot, err := r.Store.GetBot(ctx, svc.BotID)
+	bot, err := r.Store.GetBot(ctx, *svc.BotID)
 	if err != nil {
 		return
 	}
 	text := i18n.T(user.Lang, "usage_warn", pct)
 	_ = r.Telegram.SendMessage(ctx, bot.PublicID, user.TelegramID, text)
 	svc.LastWarnedPercent = pct
-	_ = r.Store.UpdateService(ctx, svc.BotID, svc)
+	_ = r.Store.UpdateServiceByID(ctx, svc)
 }
 
 func (r *Runner) checkExpiry(ctx context.Context) {
@@ -107,11 +114,21 @@ func (r *Runner) checkExpiry(ctx context.Context) {
 			if svc.ExpireAt == nil {
 				continue
 			}
-			user, err := r.Store.GetEndUser(ctx, svc.BotID, svc.EndUserID)
+			if svc.BotID == nil || svc.EndUserID == nil {
+				if svc.ExpireAt.Before(now) {
+					if client, err := r.Panels.Get(ctx, p.ID); err == nil {
+						_ = client.Disable(ctx, svc.PanelUsername)
+					}
+					svc.Status = "expired"
+					_ = r.Store.UpdateServiceByID(ctx, &svc)
+				}
+				continue
+			}
+			user, err := r.Store.GetEndUser(ctx, *svc.BotID, *svc.EndUserID)
 			if err != nil {
 				continue
 			}
-			bot, _ := r.Store.GetBot(ctx, svc.BotID)
+			bot, _ := r.Store.GetBot(ctx, *svc.BotID)
 			if svc.ExpireAt.Before(now) {
 				if client, err := r.Panels.Get(ctx, p.ID); err == nil {
 					_ = client.Disable(ctx, svc.PanelUsername)
@@ -119,7 +136,7 @@ func (r *Runner) checkExpiry(ctx context.Context) {
 				text := i18n.T(user.Lang, "service_expired")
 				_ = r.Telegram.SendMessage(ctx, bot.PublicID, user.TelegramID, text)
 				svc.Status = "expired"
-				_ = r.Store.UpdateService(ctx, svc.BotID, &svc)
+				_ = r.Store.UpdateServiceByID(ctx, &svc)
 			} else if svc.ExpireAt.Before(now.Add(48 * time.Hour)) {
 				text := i18n.T(user.Lang, "service_expiring")
 				_ = r.Telegram.SendMessage(ctx, bot.PublicID, user.TelegramID, text)

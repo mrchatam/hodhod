@@ -1,0 +1,13 @@
+{{define "content"}}
+<h2 class="text-2xl font-bold text-slate-900 mb-6">Edit panel: {{.Panel.Name}}</h2>
+<form method="post" action="/master/panels/{{.Panel.ID}}" class="bg-white rounded-xl border p-6 space-y-3 max-w-lg">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <input name="name" value="{{.Panel.Name}}" class="w-full border rounded-lg p-2" required>
+  <input name="base_url" value="{{.Panel.BaseURL}}" class="w-full border rounded-lg p-2" required>
+  <input name="base_path" value="{{.Panel.BasePath}}" class="w-full border rounded-lg p-2">
+  <input name="username" value="{{.Panel.Username}}" class="w-full border rounded-lg p-2" required>
+  <input name="password" type="password" placeholder="New password (optional)" class="w-full border rounded-lg p-2">
+  <input name="api_token" type="password" placeholder="New API token (optional)" class="w-full border rounded-lg p-2">
+  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg">Save</button>
+</form>
+{{end}}

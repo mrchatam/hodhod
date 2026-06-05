@@ -270,6 +270,9 @@ func (h *Handlers) handle(ctx context.Context, mb *managedBot, upd *models.Updat
 	text := strings.TrimSpace(msg.Text)
 	if text == "/start" {
 		h.mgr.states.clear(key)
+		if blocked, err := h.checkForceJoin(ctx, mb, user, msg.Chat.ID); blocked || err != nil {
+			return err
+		}
 		return h.sendMainMenu(ctx, mb, user, msg.Chat.ID)
 	}
 
@@ -314,6 +317,9 @@ func (h *Handlers) handleCallback(ctx context.Context, mb *managedBot, upd *mode
 	switch cq.Data {
 	case "menu":
 		h.mgr.states.clear(stateKey(mb.record.ID, user.ID))
+		if blocked, err := h.checkForceJoin(ctx, mb, user, chatID); blocked || err != nil {
+			return err
+		}
 		return h.sendMainMenu(ctx, mb, user, chatID)
 	case "wallet":
 		text := i18n.T(user.Lang, "wallet_balance", user.BalanceToman)
@@ -325,9 +331,12 @@ func (h *Handlers) handleCallback(ctx context.Context, mb *managedBot, upd *mode
 		return err
 	case "topup":
 		h.mgr.states.set(stateKey(mb.record.ID, user.ID), userState{Step: "topup_amount"})
-		_, err := mb.api.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID, Text: i18n.T(user.Lang, "topup_enter_amount"),
-		})
+		cards, _ := h.mgr.store.GetSetting(ctx, "bot", mb.record.ID, "card_numbers")
+		text := i18n.T(user.Lang, "topup_enter_amount")
+		if cards != "" {
+			text += "\n\n" + cards
+		}
+		_, err := mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text})
 		return err
 	case "support":
 		support, _ := h.mgr.store.GetSetting(ctx, "bot", mb.record.ID, "support_contact")
@@ -374,6 +383,12 @@ func (h *Handlers) handleCallback(ctx context.Context, mb *managedBot, upd *mode
 }
 
 func (h *Handlers) sendMainMenu(ctx context.Context, mb *managedBot, user *db.EndUser, chatID int64) error {
+	welcome, _ := h.mgr.store.GetSetting(ctx, "bot", mb.record.ID, "welcome_text")
+	msg := i18n.T(user.Lang, "start_welcome")
+	if welcome != "" {
+		msg = welcome
+	}
+	msg += "\n" + i18n.T(user.Lang, "main_menu")
 	kb := &models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: i18n.T(user.Lang, "btn_buy"), CallbackData: "plans"}},
@@ -383,9 +398,7 @@ func (h *Handlers) sendMainMenu(ctx context.Context, mb *managedBot, user *db.En
 		},
 	}
 	_, err := mb.api.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        i18n.T(user.Lang, "start_welcome") + "\n" + i18n.T(user.Lang, "main_menu"),
-		ReplyMarkup: kb,
+		ChatID: chatID, Text: msg, ReplyMarkup: kb,
 	})
 	return err
 }
@@ -529,14 +542,20 @@ func (l *topUpLimiter) allow() bool {
 }
 
 func (h *Handlers) notifyApprover(ctx context.Context, mb *managedBot, payment *db.Payment) {
-	botRec, err := h.mgr.store.GetBot(ctx, mb.record.ID)
-	if err != nil {
-		return
-	}
-	agent, err := h.mgr.store.GetAgent(ctx, botRec.AgentID)
-	if err != nil || agent.TgAdminID == nil {
-		return
+	var chatID int64
+	if id, ok := approverID(ctx, h.mgr.store, mb.record.ID); ok {
+		chatID = id
+	} else {
+		botRec, err := h.mgr.store.GetBot(ctx, mb.record.ID)
+		if err != nil {
+			return
+		}
+		agent, err := h.mgr.store.GetAgent(ctx, botRec.AgentID)
+		if err != nil || agent.TgAdminID == nil {
+			return
+		}
+		chatID = *agent.TgAdminID
 	}
 	text := fmt.Sprintf("New top-up pending: bot=%d payment=%d amount=%d", payment.BotID, payment.ID, payment.AmountToman)
-	_ = h.mgr.SendMessage(ctx, mb.record.PublicID, *agent.TgAdminID, text)
+	_ = h.mgr.SendMessage(ctx, mb.record.PublicID, chatID, text)
 }

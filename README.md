@@ -8,13 +8,45 @@ duration, volume) within master limits.
 
 ## Features
 
+- **Unified sales panel + Telegram bots** — sellers manage VPN customers in the web GUI and via their bot
+- **Manual panel accounts** — create users without Telegram (label/contact, sub-link copy)
+- **Granular seller permissions** — master assigns create/modify/add-time/add-volume/reset/disable/delete/bot/plans per agent
+- **Agent panel assignment** — scope inbounds, max users, expiry caps per seller
+- **Seller custom domains** — master assigns a verified custom domain for branded panel + Mini App (webhooks stay on main URL)
 - Multi-bot webhooks (`POST /wh/tg/{publicID}`)
-- Wallet + manual receipt top-up with admin/agent approval
-- Automated provisioning on purchase
-- Usage warnings (default 80%) and expiry notices
-- Master + agent web GUI (HTMX + Tailwind)
+- Wallet + manual receipt top-up with admin/agent approval (card numbers shown in bot)
+- Shared provisioning via `internal/sales` (panel, bot, and Mini App)
+- Usage warnings (per-bot `warn_percent`) and expiry notices
+- Master + agent web GUI (HTMX + Tailwind, role-aware nav)
 - Telegram Mini App JSON API
 - Optional outbound SOCKS5 for Iran hosting
+
+## Sales panel (web GUI)
+
+After login as **master**:
+
+1. **Panels** — add Marzban / 3x-ui panels, test connection
+2. **Agents** — create sellers, set permissions, assign panels + quotas, create web login + reset password
+3. **Bots** — attach Telegram bots to agents (token validated via `getMe`)
+
+After login as **agent** (seller):
+
+1. **Services** — list/create VPN users on assigned panels (+ time/GB, disable, reset, delete — permission-gated)
+2. **My Bots** — per-bot settings (welcome, support, card numbers, approver, force-join channel)
+3. **Plans** — sell plans within master price floor/ceiling on assigned panels
+
+Both channels share one tenant model: bot sales and manual panel creates go through the same sales service.
+
+### Seller custom domain
+
+Master assigns a seller-owned domain (e.g. `shop.example.com`) on the agent edit page:
+
+1. Set domain → verify DNS (TXT `_hodhod-verify.{domain}` or CNAME to main host)
+2. Enable domain after verification
+3. Configure Nginx + TLS: `bash scripts/add-seller-domain.sh shop.example.com`
+4. Seller logs in at `https://shop.example.com/login` (master routes blocked on seller host)
+
+Telegram webhooks remain on `PUBLIC_BASE_URL` (`/wh/tg/{publicID}`).
 
 ## Quick start (recommended)
 

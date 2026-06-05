@@ -1,0 +1,34 @@
+{{define "content"}}
+<h2 class="text-2xl font-bold text-slate-900 mb-6">Dashboard</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <p class="text-sm text-slate-500">Pending payments</p>
+    <p class="text-3xl font-bold text-brand-600 mt-1">{{.Pending}}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <p class="text-sm text-slate-500">Active services</p>
+    <p class="text-3xl font-bold text-brand-600 mt-1">{{.ActiveServices}}</p>
+  </div>
+  {{if .IsMaster}}
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <p class="text-sm text-slate-500">Agents</p>
+    <p class="text-3xl font-bold text-brand-600 mt-1">{{.AgentCount}}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <p class="text-sm text-slate-500">Bots</p>
+    <p class="text-3xl font-bold text-brand-600 mt-1">{{.BotCount}}</p>
+  </div>
+  {{else}}
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <p class="text-sm text-slate-500">My services</p>
+    <p class="text-3xl font-bold text-brand-600 mt-1">{{.MyServices}}</p>
+  </div>
+  {{end}}
+</div>
+{{if .IsMaster}}{{range .AgentStats}}
+<div class="bg-white rounded-xl border border-slate-200 p-4 mb-2 flex justify-between text-sm">
+  <span class="font-medium">{{.Name}}</span>
+  <span class="text-slate-500">{{.Services}} services · {{toman .Revenue}} Toman</span>
+</div>
+{{end}}{{end}}
+{{end}}

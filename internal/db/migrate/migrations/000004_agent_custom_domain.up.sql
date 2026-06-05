@@ -1,0 +1,6 @@
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS custom_domain TEXT UNIQUE;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS domain_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS domain_verified_at TIMESTAMPTZ;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS domain_verify_token TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_agents_custom_domain ON agents(custom_domain) WHERE custom_domain IS NOT NULL;

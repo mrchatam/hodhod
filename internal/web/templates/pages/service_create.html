@@ -1,0 +1,33 @@
+{{define "content"}}
+<h2 class="text-2xl font-bold text-slate-900 mb-6">Create VPN user</h2>
+<form method="post" action="/services" class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-lg space-y-4">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  {{if .IsMaster}}
+  <label class="block text-sm font-medium">Agent
+    <select name="agent_id" class="mt-1 w-full border border-slate-300 rounded-lg p-2" required>
+      {{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+  </label>
+  {{end}}
+  <label class="block text-sm font-medium">Panel
+    <select name="panel_id" class="mt-1 w-full border border-slate-300 rounded-lg p-2" required>
+      {{range .Panels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+  </label>
+  <label class="block text-sm font-medium">Label / customer name
+    <input name="label" class="mt-1 w-full border border-slate-300 rounded-lg p-2" placeholder="Customer name">
+  </label>
+  <label class="block text-sm font-medium">Contact (optional)
+    <input name="contact" class="mt-1 w-full border border-slate-300 rounded-lg p-2">
+  </label>
+  <div class="grid grid-cols-2 gap-4">
+    <label class="block text-sm font-medium">Volume (GB)
+      <input name="volume_gb" type="number" min="1" value="30" class="mt-1 w-full border border-slate-300 rounded-lg p-2" required>
+    </label>
+    <label class="block text-sm font-medium">Duration (days)
+      <input name="duration_days" type="number" min="1" value="30" class="mt-1 w-full border border-slate-300 rounded-lg p-2" required>
+    </label>
+  </div>
+  <button class="bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700">Create</button>
+</form>
+{{end}}

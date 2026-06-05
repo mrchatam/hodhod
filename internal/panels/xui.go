@@ -254,3 +254,64 @@ func (c *xuiClient) updateEnable(ctx context.Context, username string, enable bo
 	b, _ := json.Marshal(payload)
 	return c.do(ctx, http.MethodPost, "/panel/api/clients/update/"+url.PathEscape(username), strings.NewReader(string(b)), nil)
 }
+
+func (c *xuiClient) UpdateUser(ctx context.Context, username string, req UpdateUserRequest) (*UserInfo, error) {
+	cur, err := c.GetUser(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	limit := cur.DataLimitBytes
+	expire := cur.ExpireAt
+	enable := cur.Enabled
+	if req.DataLimitBytes != nil {
+		limit = *req.DataLimitBytes
+	}
+	if req.AddBytes > 0 {
+		limit += req.AddBytes
+	}
+	if req.ExpireAt != nil {
+		expire = *req.ExpireAt
+	} else if req.AddDays > 0 {
+		base := time.Now()
+		if !cur.ExpireAt.IsZero() && cur.ExpireAt.After(base) {
+			base = cur.ExpireAt
+		}
+		expire = base.Add(time.Duration(req.AddDays) * 24 * time.Hour)
+	}
+	if req.Enabled != nil {
+		enable = *req.Enabled
+	}
+	payload := map[string]any{
+		"email":      username,
+		"totalGB":    limit,
+		"expiryTime": expire.UnixMilli(),
+		"enable":     enable,
+	}
+	b, _ := json.Marshal(payload)
+	if err := c.do(ctx, http.MethodPost, "/panel/api/clients/update/"+url.PathEscape(username), strings.NewReader(string(b)), nil); err != nil {
+		return nil, err
+	}
+	return c.GetUser(ctx, username)
+}
+
+func (c *xuiClient) ListInbounds(ctx context.Context) ([]InboundInfo, error) {
+	var raw []map[string]any
+	if err := c.do(ctx, http.MethodGet, "/panel/api/inbounds/list", nil, &raw); err != nil {
+		return nil, err
+	}
+	out := make([]InboundInfo, 0, len(raw))
+	for _, item := range raw {
+		info := InboundInfo{}
+		if v, ok := item["id"].(float64); ok {
+			info.ID = int(v)
+		}
+		if v, ok := item["tag"].(string); ok {
+			info.Tag = v
+		}
+		if v, ok := item["port"].(float64); ok {
+			info.Port = int(v)
+		}
+		out = append(out, info)
+	}
+	return out, nil
+}

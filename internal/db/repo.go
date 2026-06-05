@@ -384,8 +384,6 @@ func (s *Store) UpdateService(ctx context.Context, botID int64, svc *Service) er
 	return s.DB.WithContext(ctx).Where("bot_id = ?", botID).Save(svc).Error
 }
 
-// --- Settings ---
-
 func (s *Store) GetSetting(ctx context.Context, scope string, scopeID int64, key string) (string, error) {
 	var st Setting
 	err := s.DB.WithContext(ctx).Where("scope = ? AND scope_id = ? AND key = ?", scope, scopeID, key).First(&st).Error

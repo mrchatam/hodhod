@@ -100,3 +100,38 @@ func TestMarzban_notFound(t *testing.T) {
 }
 
 var _ = url.URL{}
+
+func TestMarzban_updateUser(t *testing.T) {
+	updated := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/admin/token":
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "tok"})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/user/"):
+			limit := float64(1e9)
+			if updated {
+				limit = 2e9
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"username": "u1", "used_traffic": float64(0), "data_limit": limit,
+				"status": "active", "subscription_url": "https://sub.example/u1",
+			})
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/user/"):
+			updated = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := newMarzban(Config{BaseURL: srv.URL, Username: "a", Password: "b"}, srv.Client())
+	add := int64(1024 * 1024 * 1024)
+	info, err := c.UpdateUser(context.Background(), "u1", UpdateUserRequest{AddBytes: add})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.DataLimitBytes != int64(2e9) {
+		t.Fatalf("limit=%d want %d", info.DataLimitBytes, int64(2e9))
+	}
+}

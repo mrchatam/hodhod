@@ -1,0 +1,65 @@
+{{define "content"}}
+<div class="flex items-center justify-between mb-6">
+  <h2 class="text-2xl font-bold text-slate-900">Services</h2>
+  {{if or .IsMaster .Perms.CreateUser}}
+  <a href="/services/new" class="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-brand-700">+ Create user</a>
+  {{end}}
+</div>
+<form method="get" action="/services" class="mb-4 flex gap-2 flex-wrap">
+  <input name="q" value="{{.Query}}" placeholder="Search label or username" class="border rounded-lg px-3 py-2 text-sm">
+  <select name="status" class="border rounded-lg px-3 py-2 text-sm">
+    <option value="">All statuses</option>
+    <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>active</option>
+    <option value="disabled" {{if eq .StatusFilter "disabled"}}selected{{end}}>disabled</option>
+    <option value="expired" {{if eq .StatusFilter "expired"}}selected{{end}}>expired</option>
+  </select>
+  <button class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Filter</button>
+</form>
+<div id="qr-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-xl"><canvas id="qr-canvas"></canvas><button onclick="document.getElementById('qr-modal').classList.add('hidden')" class="block mt-3 text-sm text-slate-600">Close</button></div>
+</div>
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500">
+      <tr>
+        <th class="text-left p-3">Label</th>
+        <th class="text-left p-3">Panel user</th>
+        <th class="text-left p-3">Usage</th>
+        <th class="text-left p-3">Expires</th>
+        <th class="text-left p-3">Status</th>
+        <th class="text-right p-3">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Services}}
+    <tr id="svc-row-{{.ID}}" class="border-t border-slate-100 hover:bg-slate-50">
+      <td class="p-3">{{if .Label}}{{.Label}}{{else}}—{{end}}</td>
+      <td class="p-3 font-mono text-xs">{{.PanelUsername}}</td>
+      <td class="p-3">{{gib .UsedBytes}} / {{gib .DataLimitBytes}}</td>
+      <td class="p-3">{{date .ExpireAt}}</td>
+      <td class="p-3"><span class="px-2 py-0.5 rounded-full text-xs {{if eq .Status "active"}}bg-emerald-100 text-emerald-700{{else}}bg-slate-100 text-slate-600{{end}}">{{.Status}}</span></td>
+      <td class="p-3 text-right space-x-1">
+        {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button class="text-brand-600 hover:underline text-xs">+30d</button></form>{{end}}
+        {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button class="text-brand-600 hover:underline text-xs">+10GB</button></form>{{end}}
+        {{if $.Perms.DisableEnable}}{{if eq .Status "active"}}<form class="inline" hx-post="/services/{{.ID}}/disable" hx-target="#svc-row-{{.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-amber-600 text-xs">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-emerald-600 text-xs">Enable</button></form>{{end}}{{end}}
+        {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-slate-600 text-xs">Reset</button></form>{{end}}
+        {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="text-red-600 text-xs">Delete</button></form>{{end}}
+        <button type="button" class="text-slate-500 text-xs" onclick="navigator.clipboard.writeText('{{.SubLink}}')">Copy</button>
+        <button type="button" class="text-slate-500 text-xs qr-btn" data-sub="{{.SubLink}}">QR</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="6" class="p-8 text-center text-slate-400">No services yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+<script>
+document.querySelectorAll('.qr-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    QRCode.toCanvas(document.getElementById('qr-canvas'), btn.dataset.sub, {width: 200});
+    document.getElementById('qr-modal').classList.remove('hidden');
+  });
+});
+</script>
+{{end}}

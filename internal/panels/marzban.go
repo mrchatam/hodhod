@@ -202,3 +202,51 @@ func (c *marzbanClient) SubscriptionURL(ctx context.Context, username string) (s
 	}
 	return u.SubscriptionURL, nil
 }
+
+func (c *marzbanClient) UpdateUser(ctx context.Context, username string, req UpdateUserRequest) (*UserInfo, error) {
+	cur, err := c.GetUser(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	limit := cur.DataLimitBytes
+	expire := cur.ExpireAt
+	if req.DataLimitBytes != nil {
+		limit = *req.DataLimitBytes
+	}
+	if req.AddBytes > 0 {
+		limit += req.AddBytes
+	}
+	if req.ExpireAt != nil {
+		expire = *req.ExpireAt
+	} else if req.AddDays > 0 {
+		base := time.Now()
+		if !cur.ExpireAt.IsZero() && cur.ExpireAt.After(base) {
+			base = cur.ExpireAt
+		}
+		expire = base.Add(time.Duration(req.AddDays) * 24 * time.Hour)
+	}
+	payload := map[string]any{}
+	if limit > 0 {
+		payload["data_limit"] = limit
+	}
+	if !expire.IsZero() {
+		payload["expire"] = expire.Unix()
+	}
+	if req.Enabled != nil {
+		if *req.Enabled {
+			payload["status"] = "active"
+		} else {
+			payload["status"] = "disabled"
+		}
+	}
+	b, _ := json.Marshal(payload)
+	if err := c.do(ctx, http.MethodPut, "/api/user/"+url.PathEscape(username), strings.NewReader(string(b)), nil); err != nil {
+		return nil, err
+	}
+	return c.GetUser(ctx, username)
+}
+
+func (c *marzbanClient) ListInbounds(ctx context.Context) ([]InboundInfo, error) {
+	_ = ctx
+	return nil, ErrUnsupported
+}

@@ -24,6 +24,7 @@ import (
 	"github.com/mrchatam/hodhod/internal/miniapp"
 	"github.com/mrchatam/hodhod/internal/panels"
 	"github.com/mrchatam/hodhod/internal/provisioning"
+	"github.com/mrchatam/hodhod/internal/sales"
 	"github.com/mrchatam/hodhod/internal/scheduler"
 	"github.com/mrchatam/hodhod/internal/telegram"
 	webpkg "github.com/mrchatam/hodhod/internal/web"
@@ -65,16 +66,17 @@ func Run() error {
 	}
 
 	panelReg := panels.NewRegistry(box, httpClient, store)
+	salesSvc := &sales.Service{Store: store, Panels: panelReg}
 	wallet := &billing.WalletService{Store: store}
 	orders := &billing.OrderService{Store: store, Wallet: wallet}
-	prov := &provisioning.Service{Store: store, Panels: panelReg}
+	prov := &provisioning.Service{Store: store, Sales: salesSvc}
 	tgMgr := telegram.NewManager(cfg, box, store, httpClient, orders, wallet, prov)
 
 	if err := tgMgr.LoadActive(ctx); err != nil {
 		slog.Warn("load bots", "err", err)
 	}
 
-	webSrv, err := webpkg.NewServer(cfg, store, box, panelReg, tgMgr)
+	webSrv, err := webpkg.NewServer(cfg, store, box, panelReg, tgMgr, salesSvc)
 	if err != nil {
 		return err
 	}
@@ -96,22 +98,25 @@ func Run() error {
 	})
 	mini.Routes(r)
 
-	r.Post("/wh/tg/{publicID}", func(w http.ResponseWriter, r *http.Request) {
-		publicID := chi.URLParam(r, "publicID")
-		secret := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
-		expected, ok := tgMgr.SecretFor(r.Context(), publicID)
-		if !ok || secret != expected {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		body, _ := io.ReadAll(r.Body)
-		if err := tgMgr.Dispatch(r.Context(), publicID, body); err != nil {
-			slog.Error("webhook", "err", err)
-		}
-		w.WriteHeader(http.StatusOK)
+	r.Group(func(r chi.Router) {
+		r.Use(webSrv.HostMiddleware)
+		r.Post("/wh/tg/{publicID}", func(w http.ResponseWriter, r *http.Request) {
+			publicID := chi.URLParam(r, "publicID")
+			secret := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
+			expected, ok := tgMgr.SecretFor(r.Context(), publicID)
+			if !ok || secret != expected {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			body, _ := io.ReadAll(r.Body)
+			if err := tgMgr.Dispatch(r.Context(), publicID, body); err != nil {
+				slog.Error("webhook", "err", err)
+			}
+			w.WriteHeader(http.StatusOK)
+		})
+		r.Handle("/miniapp/*", http.StripPrefix("/miniapp", http.FileServer(http.Dir("web/miniapp"))))
+		r.Mount("/", webSrv.Handler())
 	})
-	r.Handle("/miniapp/*", http.StripPrefix("/miniapp", http.FileServer(http.Dir("web/miniapp"))))
-	r.Mount("/", webSrv.Handler())
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 	go func() {

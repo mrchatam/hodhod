@@ -96,6 +96,17 @@ func isMutatingMethod(method string) bool {
 	}
 }
 
+func (s *Server) requireAgent(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		admin := r.Context().Value(ctxAdmin).(*db.Admin)
+		if admin.Role != db.RoleAgent || admin.AgentID == nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) requireMaster(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		admin := r.Context().Value(ctxAdmin).(*db.Admin)
