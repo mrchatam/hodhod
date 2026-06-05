@@ -16,6 +16,7 @@ HODHOD_RELEASE_BASE="https://github.com/mrchatam/hodhod/releases/latest/download
 NON_INTERACTIVE=false
 DEPLOY_MODE="${DEPLOY_MODE:-docker}"   # docker | build | native
 HODHOD_IMAGE="${HODHOD_IMAGE:-$HODHOD_IMAGE_DEFAULT}"
+MENU_CHOICE=""
 USE_COLOR=true
 
 for arg in "$@"; do
@@ -96,8 +97,32 @@ ui_line() { echo "${UI_DIM}─────────────────�
 ui_step() { echo ""; echo "${UI_CYAN}${UI_BOLD}▸ Step $1/$2${UI_RESET}  $3"; ui_line; }
 ui_ok()   { echo "  ${UI_GREEN}✔${UI_RESET} $*"; }
 ui_warn() { echo "  ${UI_YELLOW}!${UI_RESET} $*"; }
-ui_err()  { echo "  ${UI_RED}✖${UI_RESET} $*" >&2; }
+ui_err()  { echo "  ✖ $*"; }
 ui_hint() { echo "  ${UI_DIM}→ $*${UI_RESET}"; }
+
+# Read from controlling terminal — SSH often has stdout tty but not stdin.
+safe_read() {
+  local var="$1"
+  local line=""
+  if [[ -r /dev/tty ]]; then
+    IFS= read -r line </dev/tty || return 1
+  else
+    IFS= read -r line || return 1
+  fi
+  printf -v "$var" '%s' "$line"
+}
+
+safe_read_secret() {
+  local var="$1"
+  local line=""
+  if [[ -r /dev/tty ]]; then
+    IFS= read -rs line </dev/tty || return 1
+  else
+    IFS= read -rs line || return 1
+  fi
+  echo ""
+  printf -v "$var" '%s' "$line"
+}
 
 # ── prerequisites ─────────────────────────────────────────────────────────────
 need_cmd() {
@@ -137,7 +162,9 @@ check_prereqs() {
     need_cmd docker || ok=false
     docker_compose_ok || { ui_err "'docker compose' plugin is required for Postgres (or Docker daemon not responding)."; ok=false; }
   fi
-  $ok || return 1
+  if [[ "$ok" != true ]]; then
+    return 1
+  fi
 }
 
 # ── input normalization (fix user input instead of rejecting) ─────────────────
@@ -233,11 +260,12 @@ prompt_loop() {
     fi
     if [[ -n "$default" ]]; then
       echo -n "  ${UI_BOLD}${label}${UI_RESET} ${UI_DIM}[${default}]${UI_RESET}: "
-      read -r val
+      safe_read val || { ui_err "Could not read input."; return 1; }
       val="${val:-$default}"
     else
       echo -n "  ${UI_BOLD}${label}${UI_RESET}: "
-      read -r val
+      safe_read val || { ui_err "Could not read input."; return 1; }
+      val="${val:-$default}"
     fi
     printf -v "$var" '%s' "$val"
     return 0
@@ -299,7 +327,7 @@ prompt_email() {
       ui_err "CERTBOT_EMAIL required in non-interactive mode."; exit 1
     fi
     echo -n "  ${UI_BOLD}${label}${UI_RESET}: "
-    read -r raw
+    safe_read raw || { ui_err "Could not read input."; return 1; }
     norm="$(normalize_email "$raw")"
     if is_valid_email "$norm"; then
       printf -v "$var" '%s' "$norm"
@@ -319,9 +347,9 @@ prompt_secret() {
       return 0
     fi
     echo -n "  ${UI_BOLD}${label}${UI_RESET}: "
-    read -rs val; echo
+    safe_read_secret val || { ui_err "Could not read input."; return 1; }
     echo -n "  ${UI_BOLD}Confirm password${UI_RESET}: "
-    read -rs val2; echo
+    safe_read_secret val2 || { ui_err "Could not read input."; return 1; }
     if [[ "$val" == "$val2" && -n "$val" ]]; then
       printf -v "$var" '%s' "$val"
       return 0
@@ -340,7 +368,7 @@ prompt_yes_no() {
   local ans
   while true; do
     echo -n "  ${UI_BOLD}${label}${UI_RESET} ${UI_DIM}[${hint}]${UI_RESET}: "
-    read -r ans
+    safe_read ans || { ui_err "Could not read input."; return 1; }
     ans="${ans:-$default}"
     case "$ans" in
       [Yy]*) printf -v "$var" '%s' "yes"; return 0 ;;
@@ -366,7 +394,7 @@ choose_deploy_mode() {
   local choice
   while true; do
     echo -n "  ${UI_BOLD}Choice${UI_RESET} ${UI_DIM}[1]${UI_RESET}: "
-    read -r choice
+    safe_read choice || { ui_err "Could not read input."; return 1; }
     choice="${choice:-1}"
     case "$choice" in
       1) DEPLOY_MODE=docker; ui_ok "Docker (prebuilt image)"; return 0 ;;
@@ -392,10 +420,10 @@ choose_menu() {
   echo ""
   while true; do
     echo -n "  ${UI_BOLD}Choice${UI_RESET} ${UI_DIM}[1]${UI_RESET}: "
-    read -r choice
+    safe_read choice || { ui_err "Could not read input. Try: bash install.sh --non-interactive"; return 1; }
     choice="${choice:-1}"
     case "$choice" in
-      1|2|3|4|5|6|7) echo "$choice"; return 0 ;;
+      1|2|3|4|5|6|7) MENU_CHOICE="$choice"; return 0 ;;
       *) ui_err "Pick a number from 1 to 7." ;;
     esac
   done
@@ -532,7 +560,7 @@ handle_image_unavailable() {
   local choice
   while true; do
     echo -n "  ${UI_BOLD}Choice${UI_RESET} ${UI_DIM}[1]${UI_RESET}: "
-    read -r choice
+    safe_read choice || { ui_err "Could not read input."; return 1; }
     choice="${choice:-1}"
     case "$choice" in
       1)
@@ -871,14 +899,17 @@ if $NON_INTERACTIVE; then
   exit $?
 fi
 
-if [[ ! -t 0 ]]; then
-  ui_err "No interactive terminal on stdin. Use: bash install.sh --non-interactive"
-  ui_hint "Required: PUBLIC_BASE_URL, MASTER_PASSWORD (and CERTBOT_EMAIL if SETUP_NGINX=1)"
+ui_hint "Checking prerequisites (openssl, curl, docker)..."
+if ! check_prereqs; then
+  echo ""
+  ui_err "Prerequisites check failed. Fix the issues above and try again."
   exit 1
 fi
 
-check_prereqs || exit 1
-choice="$(choose_menu)"
+if ! choose_menu; then
+  exit 1
+fi
+choice="$MENU_CHOICE"
 case "$choice" in
   1) do_install ;;
   2) do_update ;;
