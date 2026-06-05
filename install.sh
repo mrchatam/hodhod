@@ -51,18 +51,37 @@ HELP
 done
 
 # ── UI helpers ──────────────────────────────────────────────────────────────
+# tput queries the terminal and can hang indefinitely when TERM is missing or
+# wrong (common over SSH). Never call bare tput without a timeout.
+safe_tput() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 1 tput "$@" 2>/dev/null || true
+  else
+    tput "$@" 2>/dev/null || true
+  fi
+}
+
 ui_init() {
+  UI_BOLD="" UI_DIM="" UI_GREEN="" UI_YELLOW="" UI_RED="" UI_CYAN="" UI_RESET=""
   if ! $USE_COLOR || [[ ! -t 1 ]]; then
-    UI_BOLD="" UI_DIM="" UI_GREEN="" UI_YELLOW="" UI_RED="" UI_CYAN="" UI_RESET=""
     return
   fi
-  UI_BOLD="$(tput bold 2>/dev/null || true)"
-  UI_DIM="$(tput dim 2>/dev/null || true)"
-  UI_GREEN="$(tput setaf 2 2>/dev/null || true)"
-  UI_YELLOW="$(tput setaf 3 2>/dev/null || true)"
-  UI_RED="$(tput setaf 1 2>/dev/null || true)"
-  UI_CYAN="$(tput setaf 6 2>/dev/null || true)"
-  UI_RESET="$(tput sgr0 2>/dev/null || true)"
+  # Broken TERM causes tput to block — skip colors instead of hanging.
+  if [[ -z "${TERM:-}" || "${TERM:-}" == "dumb" ]]; then
+    USE_COLOR=false
+    return
+  fi
+  if ! safe_tput sgr0 >/dev/null 2>&1; then
+    USE_COLOR=false
+    return
+  fi
+  UI_BOLD="$(safe_tput bold)"
+  UI_DIM="$(safe_tput dim)"
+  UI_GREEN="$(safe_tput setaf 2)"
+  UI_YELLOW="$(safe_tput setaf 3)"
+  UI_RED="$(safe_tput setaf 1)"
+  UI_CYAN="$(safe_tput setaf 6)"
+  UI_RESET="$(safe_tput sgr0)"
 }
 
 ui_banner() {
@@ -99,16 +118,24 @@ maybe_sudo() {
   fi
 }
 
+docker_compose_ok() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 15 docker compose version >/dev/null 2>&1
+  else
+    docker compose version >/dev/null 2>&1
+  fi
+}
+
 check_prereqs() {
   local ok=true
   need_cmd openssl || ok=false
   need_cmd curl    || ok=false
   if [[ "$DEPLOY_MODE" != "native" ]]; then
     need_cmd docker || ok=false
-    docker compose version >/dev/null 2>&1 || { ui_err "'docker compose' plugin is required."; ok=false; }
+    docker_compose_ok || { ui_err "'docker compose' plugin is required (or Docker daemon not responding)."; ok=false; }
   else
     need_cmd docker || ok=false
-    docker compose version >/dev/null 2>&1 || { ui_err "'docker compose' plugin is required (for Postgres)."; ok=false; }
+    docker_compose_ok || { ui_err "'docker compose' plugin is required for Postgres (or Docker daemon not responding)."; ok=false; }
   fi
   $ok || return 1
 }
@@ -481,7 +508,13 @@ EOF'
 
 pull_hodhod_image() {
   export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
-  docker compose pull hodhod-app && docker image inspect "$HODHOD_IMAGE" >/dev/null 2>&1
+  ui_hint "Pulling ${HODHOD_IMAGE} ..."
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 600 docker compose pull hodhod-app
+  else
+    docker compose pull hodhod-app
+  fi
+  docker image inspect "$HODHOD_IMAGE" >/dev/null 2>&1
 }
 
 handle_image_unavailable() {
@@ -828,11 +861,20 @@ do_nginx_ssl() {
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
+# Immediate feedback — ui_init must not block silently on broken terminals.
+echo ""
+echo "Hodhod installer"
 ui_init
 
 if $NON_INTERACTIVE; then
   do_install
   exit $?
+fi
+
+if [[ ! -t 0 ]]; then
+  ui_err "No interactive terminal on stdin. Use: bash install.sh --non-interactive"
+  ui_hint "Required: PUBLIC_BASE_URL, MASTER_PASSWORD (and CERTBOT_EMAIL if SETUP_NGINX=1)"
+  exit 1
 fi
 
 check_prereqs || exit 1
