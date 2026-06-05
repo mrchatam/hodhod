@@ -88,3 +88,56 @@ func mustJSON(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+func TestXUI_ListUsers(t *testing.T) {
+	settings := mustJSON(map[string]any{
+		"clients": []map[string]any{
+			{"email": "a@test", "enable": true, "totalGB": float64(1e9), "expiryTime": float64(0), "limitIp": float64(2)},
+		},
+	})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/panel/api/inbounds/list" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(xuiResp{
+			Success: true,
+			Obj: mustJSON([]map[string]any{{
+				"id": float64(1), "tag": "in-443", "settings": string(settings),
+				"clientStats": []map[string]any{{"email": "a@test", "up": float64(100), "down": float64(50)}},
+			}}),
+		})
+	}))
+	defer srv.Close()
+
+	c := newXUI(Config{BaseURL: srv.URL, APIToken: "tok"}, srv.Client())
+	users, err := c.ListUsers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0].Username != "a@test" || users[0].UsedBytes != 150 || users[0].LimitIP != 2 {
+		t.Fatalf("users=%+v", users)
+	}
+}
+
+func TestXUI_Backup(t *testing.T) {
+	dbBytes := append([]byte("SQLite format 3\x00"), make([]byte, 32)...)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/panel/api/server/getDb" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(dbBytes)
+	}))
+	defer srv.Close()
+
+	c := newXUI(Config{BaseURL: srv.URL, APIToken: "tok"}, srv.Client())
+	name, data, err := c.Backup(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(name, ".db") || len(data) != len(dbBytes) {
+		t.Fatalf("name=%q len=%d", name, len(data))
+	}
+}

@@ -170,8 +170,11 @@ func (c *xuiClient) CreateUser(ctx context.Context, req CreateUserRequest) (*Use
 		"enable":     true,
 		"expiryTime": expiry,
 		"totalGB":    req.DataLimitBytes,
-		"limitIp":    0,
+		"limitIp":    req.LimitIP,
 		"tgId":       0,
+	}
+	if req.Note != "" {
+		clientObj["comment"] = req.Note
 	}
 	payload := map[string]any{
 		"client":     clientObj,
@@ -314,4 +317,149 @@ func (c *xuiClient) ListInbounds(ctx context.Context) ([]InboundInfo, error) {
 		out = append(out, info)
 	}
 	return out, nil
+}
+
+func (c *xuiClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
+	var raw []map[string]any
+	if err := c.do(ctx, http.MethodGet, "/panel/api/inbounds/list", nil, &raw); err != nil {
+		return nil, err
+	}
+	var out []UserInfo
+	for _, inbound := range raw {
+		inboundID := 0
+		if v, ok := inbound["id"].(float64); ok {
+			inboundID = int(v)
+		}
+		tag, _ := inbound["tag"].(string)
+		statsByEmail := map[string]map[string]any{}
+		if stats, ok := inbound["clientStats"].([]any); ok {
+			for _, s := range stats {
+				st, ok := s.(map[string]any)
+				if !ok {
+					continue
+				}
+				email, _ := st["email"].(string)
+				if email != "" {
+					statsByEmail[email] = st
+				}
+			}
+		}
+		settingsStr, _ := inbound["settings"].(string)
+		if settingsStr == "" {
+			continue
+		}
+		var settings struct {
+			Clients []map[string]any `json:"clients"`
+		}
+		if err := json.Unmarshal([]byte(settingsStr), &settings); err != nil {
+			continue
+		}
+		for _, cl := range settings.Clients {
+			email, _ := cl["email"].(string)
+			if email == "" {
+				continue
+			}
+			u := UserInfo{
+				Username:   email,
+				InboundID:  inboundID,
+				InboundTag: tag,
+				Enabled:    true,
+				Raw:        cl,
+			}
+			if v, ok := cl["enable"].(bool); ok {
+				u.Enabled = v
+			}
+			if v, ok := cl["totalGB"].(float64); ok {
+				u.DataLimitBytes = int64(v)
+			}
+			if v, ok := cl["expiryTime"].(float64); ok && v > 0 {
+				u.ExpireAt = time.UnixMilli(int64(v))
+			}
+			if v, ok := cl["limitIp"].(float64); ok {
+				u.LimitIP = int(v)
+			}
+			if v, ok := cl["comment"].(string); ok {
+				u.Note = v
+			}
+			if st, ok := statsByEmail[email]; ok {
+				if v, ok := st["up"].(float64); ok {
+					u.UsedBytes += int64(v)
+				}
+				if v, ok := st["down"].(float64); ok {
+					u.UsedBytes += int64(v)
+				}
+			}
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+func (c *xuiClient) Backup(ctx context.Context) (string, []byte, error) {
+	data, err := c.doRaw(ctx, http.MethodGet, "/panel/api/server/getDb", nil)
+	if err != nil {
+		return "", nil, err
+	}
+	name := fmt.Sprintf("xui-backup-%s.db", time.Now().Format("20060102-150405"))
+	return name, data, nil
+}
+
+func (c *xuiClient) doRaw(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	data, err := c.doRawLocked(ctx, method, path, body)
+	if err == nil {
+		return data, nil
+	}
+	if c.cfg.APIToken != "" {
+		return nil, err
+	}
+	if loginErr := c.login(ctx); loginErr != nil {
+		return nil, loginErr
+	}
+	return c.doRawLocked(ctx, method, path, body)
+}
+
+func (c *xuiClient) doRawLocked(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.prefix()+path, body)
+	if err != nil {
+		return nil, err
+	}
+	if c.cfg.APIToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.cfg.APIToken)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, &PanelAuthError{Msg: "unauthorized"}
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("xui: status %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "application/json") {
+		var wrap xuiResp
+		if err := json.Unmarshal(data, &wrap); err == nil && !wrap.Success {
+			return nil, fmt.Errorf("xui: %s", wrap.Msg)
+		}
+	}
+	if len(data) < 16 || string(data[:16]) != "SQLite format 3\x00" {
+		if len(data) > 0 && data[0] == '{' {
+			var wrap xuiResp
+			if err := json.Unmarshal(data, &wrap); err == nil && wrap.Success && len(wrap.Obj) > 0 {
+				return wrap.Obj, nil
+			}
+		}
+	}
+	return data, nil
 }

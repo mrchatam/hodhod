@@ -7,6 +7,14 @@
   <td class="p-3"><span class="badge {{if eq .Svc.Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Svc.Status}}</span></td>
   <td class="p-3 text-right">
     <div class="flex flex-wrap justify-end gap-1">
+    {{if $.Perms.ModifyUser}}
+    <form class="inline flex flex-wrap gap-1 items-center" method="post" action="/services/{{.Svc.ID}}/modify">
+      <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+      <input name="volume_gb" type="number" placeholder="GB" class="form-input w-16 text-xs py-1">
+      <input name="expire_at" type="date" class="form-input text-xs py-1">
+      <button type="submit" class="btn btn-secondary btn-sm">Set</button>
+    </form>
+    {{end}}
     {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button type="submit" class="btn btn-secondary btn-sm">+30d</button></form>{{end}}
     {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button type="submit" class="btn btn-secondary btn-sm">+10GB</button></form>{{end}}
     {{if $.Perms.DisableEnable}}{{if eq .Svc.Status "active"}}<form class="inline" hx-post="/services/{{.Svc.ID}}/disable" hx-target="#svc-row-{{.Svc.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>{{end}}{{end}}

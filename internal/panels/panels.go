@@ -32,6 +32,7 @@ type CreateUserRequest struct {
 	ExpireAt       time.Time
 	Scope          Scope
 	Note           string
+	LimitIP        int
 }
 
 // UserInfo is normalized panel user state.
@@ -42,6 +43,10 @@ type UserInfo struct {
 	ExpireAt        time.Time
 	Enabled         bool
 	SubscriptionURL string
+	InboundID       int
+	InboundTag      string
+	LimitIP         int
+	Note            string
 	Raw             map[string]any
 }
 
@@ -72,8 +77,14 @@ type Client interface {
 	DeleteUser(ctx context.Context, username string) error
 	SubscriptionURL(ctx context.Context, username string) (string, error)
 	ListInbounds(ctx context.Context) ([]InboundInfo, error)
+	ListUsers(ctx context.Context) ([]UserInfo, error)
 	Kind() PanelKind
 	TestConnection(ctx context.Context) error
+}
+
+// Backuper can download a native panel database snapshot (3x-ui x-ui.db).
+type Backuper interface {
+	Backup(ctx context.Context) (filename string, data []byte, err error)
 }
 
 // Config for building a panel client.

@@ -4,8 +4,11 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/mrchatam/hodhod/internal/db"
 )
 
 //go:embed templates/layout.html templates/partials/*.html templates/pages/*.html templates/login.html
@@ -13,7 +16,7 @@ var templateFS embed.FS
 
 var pageNames = []string{
 	"dashboard", "payments", "services", "service_create", "onboarding",
-	"agents", "agent_edit", "panels", "panel_edit", "bots", "bot_settings",
+	"agents", "agent_edit", "agent_panels", "panels", "panel_edit", "panel_users", "panel_backups", "bots", "bot_settings",
 	"agent_bots", "agent_plans", "agent_bot_settings",
 }
 
@@ -22,8 +25,12 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		"toman": formatToman,
 		"gib":   formatGiB,
 		"date":  formatDate,
-		"time":  formatTime,
-		"deref": derefInt64,
+		"time":        formatTime,
+		"deref":       derefInt64,
+		"derefStr":    derefString,
+		"agentDomain": db.AgentDomain,
+		"dict":        templateDict,
+		"urlPath":     urlPathEscape,
 	}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
@@ -87,4 +94,30 @@ func derefInt64(p *int64) int64 {
 		return 0
 	}
 	return *p
+}
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func templateDict(values ...any) (map[string]any, error) {
+	if len(values)%2 != 0 {
+		return nil, fmt.Errorf("dict: odd argument count")
+	}
+	m := make(map[string]any, len(values)/2)
+	for i := 0; i < len(values); i += 2 {
+		key, ok := values[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: key must be string")
+		}
+		m[key] = values[i+1]
+	}
+	return m, nil
+}
+
+func urlPathEscape(s string) string {
+	return url.PathEscape(s)
 }

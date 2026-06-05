@@ -20,6 +20,10 @@ duration, volume) within master limits.
 - Master + agent web GUI (HTMX + Tailwind, role-aware nav)
 - Telegram Mini App JSON API
 - Optional outbound SOCKS5 for Iran hosting
+- **Live panel user management** — browse/create/edit users directly on Marzban / 3x-ui panels
+- **3x-ui automatic backups** — scheduled `x-ui.db` snapshots with download, retention, and Telegram push
+
+See [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md) for panel capability coverage and known gaps.
 
 ## Sales panel (web GUI)
 

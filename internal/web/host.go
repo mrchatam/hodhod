@@ -71,8 +71,8 @@ func (s *Server) requireMainHost(next http.Handler) http.Handler {
 
 // AgentPublicURL returns HTTPS base URL for an agent's branded panel when enabled.
 func (s *Server) AgentPublicURL(ctx context.Context, agent *db.Agent) string {
-	if agent != nil && agent.DomainEnabled && agent.DomainVerifiedAt != nil && agent.CustomDomain != "" {
-		return "https://" + agent.CustomDomain
+	if agent != nil && agent.DomainEnabled && agent.DomainVerifiedAt != nil && db.AgentDomain(agent) != "" {
+		return "https://" + db.AgentDomain(agent)
 	}
 	return s.Cfg.PublicBaseURL
 }

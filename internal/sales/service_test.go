@@ -44,6 +44,13 @@ func (m *mockPanel) SubscriptionURL(context.Context, string) (string, error) {
 func (m *mockPanel) ListInbounds(context.Context) ([]panels.InboundInfo, error) {
 	return nil, panels.ErrUnsupported
 }
+func (m *mockPanel) ListUsers(context.Context) ([]panels.UserInfo, error) {
+	out := make([]panels.UserInfo, 0, len(m.users))
+	for _, u := range m.users {
+		out = append(out, *u)
+	}
+	return out, nil
+}
 func (m *mockPanel) Kind() panels.PanelKind               { return panels.KindMarzban }
 func (m *mockPanel) TestConnection(context.Context) error { return nil }
 

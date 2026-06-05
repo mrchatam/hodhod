@@ -1,0 +1,62 @@
+{{define "content"}}
+<div class="flex items-center gap-3 mb-2">
+  <a href="/master/panels/{{.Panel.ID}}" class="btn btn-link btn-sm">← {{.Panel.Name}}</a>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 mb-2">Panel users</h2>
+<p class="text-sm text-slate-500 mb-6">Live users from {{.Panel.Type}} panel (not Hodhod services)</p>
+
+<form method="get" action="/master/panels/{{.Panel.ID}}/users" class="mb-4 flex gap-2 flex-wrap">
+  <input name="q" value="{{.Query}}" placeholder="Search email" class="form-input max-w-xs">
+  <select name="inbound" class="form-input max-w-[10rem]">
+    <option value="">All inbounds</option>
+    {{range .Inbounds}}<option value="{{.ID}}" {{if eq $.InboundFilter (printf "%d" .ID)}}selected{{end}}>{{.ID}}: {{.Tag}}</option>{{end}}
+  </select>
+  <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+</form>
+
+<form method="post" action="/master/panels/{{.Panel.ID}}/users" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg mb-6">
+  <h3 class="font-semibold">Create user</h3>
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <label class="form-field">
+    <span class="form-label">Email / username</span>
+    <input name="username" class="form-input" required placeholder="user@shop">
+  </label>
+  {{if .Inbounds}}
+  <label class="form-field">
+    <span class="form-label">Inbound</span>
+    <select name="inbound_id" class="form-input">
+      {{range .Inbounds}}<option value="{{.ID}}">{{.ID}}: {{.Tag}}</option>{{end}}
+    </select>
+  </label>
+  {{end}}
+  <div class="grid grid-cols-2 gap-4">
+    <label class="form-field"><span class="form-label">Volume (GB)</span><input name="volume_gb" type="number" value="30" class="form-input"></label>
+    <label class="form-field"><span class="form-label">Duration (days)</span><input name="duration_days" type="number" value="30" class="form-input"></label>
+  </div>
+  <label class="form-field"><span class="form-label">IP limit (0 = unlimited)</span><input name="ip_limit" type="number" value="0" class="form-input"></label>
+  <label class="form-field"><span class="form-label">Note</span><input name="note" class="form-input" placeholder="Optional comment"></label>
+  <button type="submit" class="btn btn-primary">Create on panel</button>
+</form>
+
+<div class="bg-white rounded-xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500">
+      <tr>
+        <th class="text-left p-3">User</th>
+        <th class="text-left p-3">Inbound</th>
+        <th class="text-left p-3">Usage</th>
+        <th class="text-left p-3">Expires</th>
+        <th class="text-left p-3">Status</th>
+        <th class="text-right p-3">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Users}}
+    {{template "panel_user_row" (dict "User" . "Panel" $.Panel "CSRF" $.CSRF)}}
+    {{else}}
+    <tr><td colspan="6" class="p-8 text-center text-slate-400">No users on this panel.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

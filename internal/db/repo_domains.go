@@ -29,10 +29,6 @@ func (s *Store) SetAgentDomain(ctx context.Context, agentID int64, rawDomain str
 	if rawDomain != "" && domain == "" {
 		return fmt.Errorf("invalid domain")
 	}
-	agent, err := s.GetAgent(ctx, agentID)
-	if err != nil {
-		return err
-	}
 	if domain != "" {
 		var existing Agent
 		err := s.DB.WithContext(ctx).Where("custom_domain = ? AND id != ?", domain, agentID).First(&existing).Error
@@ -47,11 +43,17 @@ func (s *Store) SetAgentDomain(ctx context.Context, agentID int64, rawDomain str
 	if err != nil {
 		return err
 	}
-	agent.CustomDomain = domain
-	agent.DomainVerifyToken = token
-	agent.DomainVerifiedAt = nil
-	agent.DomainEnabled = false
-	return s.UpdateAgent(ctx, agent)
+	updates := map[string]any{
+		"domain_verify_token": token,
+		"domain_verified_at":  nil,
+		"domain_enabled":      false,
+	}
+	if domain == "" {
+		updates["custom_domain"] = nil
+	} else {
+		updates["custom_domain"] = domain
+	}
+	return s.DB.WithContext(ctx).Model(&Agent{}).Where("id = ?", agentID).Updates(updates).Error
 }
 
 func (s *Store) MarkAgentDomainVerified(ctx context.Context, agentID int64) error {
@@ -65,11 +67,11 @@ func (s *Store) SetAgentDomainEnabled(ctx context.Context, agentID int64, enable
 	if err != nil {
 		return err
 	}
-	if enabled && (agent.DomainVerifiedAt == nil || agent.CustomDomain == "") {
+	if enabled && (agent.DomainVerifiedAt == nil || AgentDomain(agent) == "") {
 		return fmt.Errorf("domain must be verified before enabling")
 	}
-	agent.DomainEnabled = enabled
-	return s.UpdateAgent(ctx, agent)
+	return s.DB.WithContext(ctx).Model(&Agent{}).Where("id = ?", agentID).
+		Updates(map[string]any{"domain_enabled": enabled}).Error
 }
 
 func newVerifyToken() (string, error) {

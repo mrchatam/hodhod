@@ -8,6 +8,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/mrchatam/hodhod/internal/backup"
 	"github.com/mrchatam/hodhod/internal/db"
 	"github.com/mrchatam/hodhod/internal/i18n"
 	"github.com/mrchatam/hodhod/internal/panels"
@@ -20,24 +21,29 @@ type Runner struct {
 	Store    *db.Store
 	Panels   *panels.Registry
 	Telegram *telegram.Manager
+	Backup   *backup.Service
 	Workers  int
 }
 
 // New creates a scheduler runner.
-func New(store *db.Store, reg *panels.Registry, tg *telegram.Manager, workers int) *Runner {
+func New(store *db.Store, reg *panels.Registry, tg *telegram.Manager, backupSvc *backup.Service, workers int) *Runner {
 	return &Runner{
 		Cron:     cron.New(),
 		Store:    store,
 		Panels:   reg,
 		Telegram: tg,
+		Backup:   backupSvc,
 		Workers:  workers,
 	}
 }
 
 // Start registers cron jobs.
-func (r *Runner) Start(usageSpec, expirySpec string) {
+func (r *Runner) Start(usageSpec, expirySpec, backupSpec string) {
 	_, _ = r.Cron.AddFunc(usageSpec, func() { r.pollUsage(context.Background()) })
 	_, _ = r.Cron.AddFunc(expirySpec, func() { r.checkExpiry(context.Background()) })
+	if r.Backup != nil && backupSpec != "" {
+		_, _ = r.Cron.AddFunc(backupSpec, func() { r.runBackups(context.Background()) })
+	}
 	r.Cron.Start()
 }
 
@@ -141,6 +147,19 @@ func (r *Runner) checkExpiry(ctx context.Context) {
 				text := i18n.T(user.Lang, "service_expiring")
 				_ = r.Telegram.SendMessage(ctx, bot.PublicID, user.TelegramID, text)
 			}
+		}
+	}
+}
+
+func (r *Runner) runBackups(ctx context.Context) {
+	panelsList, err := r.Store.ListPanelsWithBackupEnabled(ctx)
+	if err != nil {
+		slog.Error("scheduler backup list panels", "err", err)
+		return
+	}
+	for _, p := range panelsList {
+		if _, err := r.Backup.RunForPanel(ctx, p.ID); err != nil {
+			slog.Warn("scheduled backup failed", "panel", p.ID, "err", err)
 		}
 	}
 }

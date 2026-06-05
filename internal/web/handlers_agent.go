@@ -202,3 +202,27 @@ func (s *Server) postAgentBotSettings(w http.ResponseWriter, r *http.Request) {
 	s.setFlash(w, "ok", "Settings saved")
 	http.Redirect(w, r, fmt.Sprintf("/agent/bots/%d/settings", id), http.StatusSeeOther)
 }
+
+func (s *Server) pageAgentPanels(w http.ResponseWriter, r *http.Request) {
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	if admin.AgentID == nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	agentPanels, _ := s.Store.ListAgentPanels(r.Context(), *admin.AgentID)
+	type row struct {
+		AgentPanel db.AgentPanel
+		Panel      db.Panel
+		Usage      int64
+	}
+	var rows []row
+	for _, ap := range agentPanels {
+		p, err := s.Store.GetPanel(r.Context(), ap.PanelID)
+		if err != nil {
+			continue
+		}
+		n, _ := s.Store.CountServicesByAgentPanel(r.Context(), *admin.AgentID, ap.PanelID)
+		rows = append(rows, row{AgentPanel: ap, Panel: *p, Usage: n})
+	}
+	s.renderPage(w, "agent_panels", r, map[string]any{"Rows": rows})
+}

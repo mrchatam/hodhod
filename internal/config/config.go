@@ -26,6 +26,8 @@ type Config struct {
 	MasterPassword     string `env:"MASTER_PASSWORD,required"`
 	CronUsagePoll      string `env:"CRON_USAGE_POLL" envDefault:"@every 5m"`
 	CronExpiryCheck    string `env:"CRON_EXPIRY_CHECK" envDefault:"@every 1h"`
+	CronBackup         string `env:"CRON_BACKUP" envDefault:"0 3 * * *"`
+	BackupDir          string `env:"BACKUP_DIR" envDefault:"./data/backups"`
 	AllowCustomDomains bool   `env:"ALLOW_CUSTOM_DOMAINS" envDefault:"true"`
 }
 

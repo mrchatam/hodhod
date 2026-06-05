@@ -196,3 +196,42 @@ func channelJoinURL(channel string) string {
 	}
 	return ""
 }
+
+// SendDocument uploads a file to Telegram via sendDocument (standalone bot token).
+func SendDocument(ctx context.Context, httpClient *http.Client, token string, chatID int64, filename string, data []byte, caption string) error {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	var body strings.Builder
+	boundary := "hodhodBoundary"
+	body.WriteString("--" + boundary + "\r\n")
+	body.WriteString(`Content-Disposition: form-data; name="chat_id"` + "\r\n\r\n")
+	fmt.Fprintf(&body, "%d\r\n", chatID)
+	if caption != "" {
+		body.WriteString("--" + boundary + "\r\n")
+		body.WriteString(`Content-Disposition: form-data; name="caption"` + "\r\n\r\n")
+		body.WriteString(caption + "\r\n")
+	}
+	body.WriteString("--" + boundary + "\r\n")
+	body.WriteString(fmt.Sprintf(`Content-Disposition: form-data; name="document"; filename="%s"`, filename) + "\r\n")
+	body.WriteString("Content-Type: application/octet-stream\r\n\r\n")
+	body.Write(data)
+	body.WriteString("\r\n--" + boundary + "--\r\n")
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendDocument", token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body.String()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram sendDocument: %s", string(b))
+	}
+	return nil
+}

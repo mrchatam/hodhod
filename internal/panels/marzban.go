@@ -250,3 +250,17 @@ func (c *marzbanClient) ListInbounds(ctx context.Context) ([]InboundInfo, error)
 	_ = ctx
 	return nil, ErrUnsupported
 }
+
+func (c *marzbanClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
+	var raw struct {
+		Users []map[string]any `json:"users"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/users?offset=0&limit=1000", nil, &raw); err != nil {
+		return nil, err
+	}
+	out := make([]UserInfo, 0, len(raw.Users))
+	for _, u := range raw.Users {
+		out = append(out, *c.mapUser(u))
+	}
+	return out, nil
+}

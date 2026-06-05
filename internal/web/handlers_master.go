@@ -99,7 +99,6 @@ func permFields(p *db.AgentPermissions) []map[string]any {
 		{"delete_user", "Delete users", p.DeleteUser},
 		{"manage_bot", "Manage bot", p.ManageBot},
 		{"manage_plans", "Manage plans", p.ManagePlans},
-		{"view_only", "View only", p.ViewOnly},
 	}
 	out := make([]map[string]any, len(fields))
 	for i, f := range fields {
@@ -111,24 +110,22 @@ func permFields(p *db.AgentPermissions) []map[string]any {
 func (s *Server) postAgentUpdate(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	_ = r.ParseForm()
-	agent, err := s.Store.GetAgent(r.Context(), id)
-	if err != nil {
+	if _, err := s.Store.GetAgent(r.Context(), id); err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	agent.Name = r.FormValue("name")
-	agent.Status = db.AgentStatus(r.FormValue("status"))
-	agent.MaxBots, _ = strconv.Atoi(r.FormValue("max_bots"))
-	agent.PriceFloorToman, _ = strconv.ParseInt(r.FormValue("price_floor"), 10, 64)
-	agent.PriceCeilingToman, _ = strconv.ParseInt(r.FormValue("price_ceiling"), 10, 64)
+	name := r.FormValue("name")
+	status := db.AgentStatus(r.FormValue("status"))
+	maxBots, _ := strconv.Atoi(r.FormValue("max_bots"))
+	floor, _ := strconv.ParseInt(r.FormValue("price_floor"), 10, 64)
+	ceiling, _ := strconv.ParseInt(r.FormValue("price_ceiling"), 10, 64)
+	var tgAdminID *int64
 	if v := r.FormValue("tg_admin_id"); v != "" {
 		n, _ := strconv.ParseInt(v, 10, 64)
-		agent.TgAdminID = &n
-	} else {
-		agent.TgAdminID = nil
+		tgAdminID = &n
 	}
-	_ = s.Store.UpdateAgent(r.Context(), agent)
-	s.setFlash(w, "ok", "Agent saved")
+	err := s.Store.UpdateAgentSettings(r.Context(), id, name, status, maxBots, floor, ceiling, tgAdminID)
+	s.saveFlash(w, err, "Agent saved")
 	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 }
 
@@ -136,7 +133,7 @@ func (s *Server) postAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	_ = r.ParseForm()
 	p := &db.AgentPermissions{AgentID: id}
-	for _, k := range []string{"create_user", "modify_user", "add_time", "add_volume", "reset_usage", "disable_enable", "delete_user", "manage_bot", "manage_plans", "view_only"} {
+	for _, k := range []string{"create_user", "modify_user", "add_time", "add_volume", "reset_usage", "disable_enable", "delete_user", "manage_bot", "manage_plans"} {
 		val := r.FormValue(k) == "on"
 		switch k {
 		case "create_user":
@@ -157,17 +154,12 @@ func (s *Server) postAgentPermissions(w http.ResponseWriter, r *http.Request) {
 			p.ManageBot = val
 		case "manage_plans":
 			p.ManagePlans = val
-		case "view_only":
-			p.ViewOnly = val
 		}
 	}
-	if p.ViewOnly {
-		p.CreateUser, p.ModifyUser, p.AddTime, p.AddVolume = false, false, false, false
-		p.ResetUsage, p.DisableEnable, p.DeleteUser = false, false, false
-		p.ManageBot, p.ManagePlans = false, false
-	}
-	_ = s.Store.UpsertAgentPermissions(r.Context(), p)
-	s.setFlash(w, "ok", "Permissions saved")
+	p.ViewOnly = !(p.CreateUser || p.ModifyUser || p.AddTime || p.AddVolume ||
+		p.ResetUsage || p.DisableEnable || p.DeleteUser || p.ManageBot || p.ManagePlans)
+	err := s.Store.UpsertAgentPermissions(r.Context(), p)
+	s.saveFlash(w, err, "Permissions saved")
 	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 }
 
@@ -181,8 +173,8 @@ func (s *Server) postAgentPanel(w http.ResponseWriter, r *http.Request) {
 		AgentID: id, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(parseInboundIDs(r.FormValue("inbound_ids"))),
 		MaxUsers: maxUsers, ExpiryCapDays: capDays,
 	}
-	_ = s.Store.UpsertAgentPanel(r.Context(), ap)
-	s.setFlash(w, "ok", "Panel assigned")
+	err := s.Store.UpsertAgentPanel(r.Context(), ap)
+	s.saveFlash(w, err, "Panel assigned")
 	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 }
 
@@ -196,8 +188,8 @@ func (s *Server) postAgentResetPassword(w http.ResponseWriter, r *http.Request) 
 	}
 	hash, _ := HashPassword(r.FormValue("password"))
 	admins[0].PasswordHash = hash
-	_ = s.Store.UpdateAdmin(r.Context(), &admins[0])
-	s.setFlash(w, "ok", "Password reset")
+	err := s.Store.UpdateAdmin(r.Context(), &admins[0])
+	s.saveFlash(w, err, "Password reset")
 	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 }
 
@@ -227,9 +219,11 @@ func (s *Server) postPanel(w http.ResponseWriter, r *http.Request) {
 		BaseURL: r.FormValue("base_url"), BasePath: r.FormValue("base_path"),
 		Username: r.FormValue("username"), PasswordEnc: enc, APITokenEnc: apiTokenEnc, Status: "active",
 	}
-	_ = s.Store.CreatePanel(r.Context(), p)
-	s.Panels.Invalidate(p.ID)
-	s.setFlash(w, "ok", "Panel added")
+	err := s.Store.CreatePanel(r.Context(), p)
+	if err == nil {
+		s.Panels.Invalidate(p.ID)
+	}
+	s.saveFlash(w, err, "Panel added")
 	http.Redirect(w, r, "/master/panels", http.StatusSeeOther)
 }
 
@@ -353,7 +347,8 @@ func (s *Server) postBotPanel(w http.ResponseWriter, r *http.Request) {
 	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
 	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(parseInboundIDs(r.FormValue("inbound_ids")))}
-	_ = s.Store.UpsertBotPanel(r.Context(), bp)
+	err := s.Store.UpsertBotPanel(r.Context(), bp)
+	s.saveFlash(w, err, "Panel linked to bot")
 	http.Redirect(w, r, fmt.Sprintf("/master/bots/%d/settings", botID), http.StatusSeeOther)
 }
 
@@ -389,9 +384,11 @@ func (s *Server) postPanelUpdate(w http.ResponseWriter, r *http.Request) {
 	if token := r.FormValue("api_token"); token != "" {
 		p.APITokenEnc, _ = s.Box.Encrypt(token)
 	}
-	_ = s.Store.UpdatePanel(r.Context(), p)
-	s.Panels.Invalidate(id)
-	s.setFlash(w, "ok", "Panel updated")
+	err = s.Store.UpdatePanel(r.Context(), p)
+	if err == nil {
+		s.Panels.Invalidate(id)
+	}
+	s.saveFlash(w, err, "Panel updated")
 	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d", id), http.StatusSeeOther)
 }
 
@@ -403,9 +400,11 @@ func (s *Server) postPanelDisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Status = "disabled"
-	_ = s.Store.UpdatePanel(r.Context(), p)
-	s.Panels.Invalidate(id)
-	s.setFlash(w, "ok", "Panel disabled")
+	err = s.Store.UpdatePanel(r.Context(), p)
+	if err == nil {
+		s.Panels.Invalidate(id)
+	}
+	s.saveFlash(w, err, "Panel disabled")
 	http.Redirect(w, r, "/master/panels", http.StatusSeeOther)
 }
 
@@ -428,17 +427,18 @@ func (s *Server) postAgentVerifyDomain(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if agent.CustomDomain == "" {
+	domain := db.AgentDomain(agent)
+	if domain == "" {
 		s.setFlash(w, "err", "Set a domain first")
 		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 		return
 	}
 	platformHost := s.Cfg.MainHost()
-	if err := s.DomainVerifier.Verify(r.Context(), agent.CustomDomain, agent.DomainVerifyToken, platformHost); err != nil {
+	if err := s.DomainVerifier.Verify(r.Context(), domain, agent.DomainVerifyToken, platformHost); err != nil {
 		s.setFlash(w, "err", "DNS verification failed")
 	} else {
-		_ = s.Store.MarkAgentDomainVerified(r.Context(), id)
-		s.setFlash(w, "ok", "Domain verified")
+		err := s.Store.MarkAgentDomainVerified(r.Context(), id)
+		s.saveFlash(w, err, "Domain verified")
 	}
 	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 }

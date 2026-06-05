@@ -34,6 +34,7 @@
   <form method="post" action="/master/agents/{{.Agent.ID}}/permissions" class="bg-white rounded-xl border p-6 space-y-2 text-sm">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <h3 class="font-semibold mb-2">Permissions</h3>
+    {{if .Perms.ViewOnly}}<p class="text-xs text-slate-500 mb-2">View only mode — no capabilities selected.</p>{{end}}
     {{range .PermFields}}<label class="flex items-center gap-2"><input type="checkbox" name="{{.Key}}" {{if .Checked}}checked{{end}}> {{.Label}}</label>{{end}}
     <button type="submit" class="btn btn-primary mt-3">Save permissions</button>
   </form>
@@ -80,13 +81,13 @@
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <label class="form-field">
       <span class="form-label">Custom domain</span>
-      <input name="custom_domain" value="{{.Agent.CustomDomain}}" class="form-input" placeholder="shop.example.com">
+      <input name="custom_domain" value="{{agentDomain .Agent}}" class="form-input" placeholder="shop.example.com">
     </label>
     <button type="submit" class="btn btn-primary btn-sm">Save domain</button>
   </form>
-  {{if .Agent.CustomDomain}}
-  <p class="form-hint">Verify DNS — add TXT <code>_hodhod-verify.{{.Agent.CustomDomain}}</code> = <code>{{.Agent.DomainVerifyToken}}</code></p>
-  <p class="form-hint">Or CNAME <code>{{.Agent.CustomDomain}}</code> → <code>{{.PlatformHost}}</code></p>
+  {{if agentDomain .Agent}}
+  <p class="form-hint">Verify DNS — add TXT <code>_hodhod-verify.{{agentDomain .Agent}}</code> = <code>{{.Agent.DomainVerifyToken}}</code></p>
+  <p class="form-hint">Or CNAME <code>{{agentDomain .Agent}}</code> → <code>{{.PlatformHost}}</code></p>
   <form method="post" action="/master/agents/{{.Agent.ID}}/verify-domain"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="btn btn-secondary btn-sm">Verify DNS</button></form>
   {{if .Agent.DomainVerifiedAt}}
   <p class="text-sm text-emerald-700">Verified · Panel URL: {{.AgentPublicURL}}/login</p>

@@ -1,7 +1,9 @@
 package web
 
 import (
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/mrchatam/hodhod/internal/db"
 )
@@ -82,6 +84,26 @@ func (s *Server) agentID(admin *db.Admin) (int64, bool) {
 
 func (s *Server) setFlash(w http.ResponseWriter, kind, msg string) {
 	http.SetCookie(w, &http.Cookie{Name: "hodhod_flash", Value: kind + ":" + msg, Path: "/", MaxAge: 60})
+}
+
+func (s *Server) saveFlash(w http.ResponseWriter, err error, okMsg string) {
+	if err != nil {
+		slog.Error("save failed", "err", err)
+		s.setFlash(w, "err", friendlySaveErr(err))
+		return
+	}
+	s.setFlash(w, "ok", okMsg)
+}
+
+func friendlySaveErr(err error) string {
+	if err == nil {
+		return "Save failed"
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") {
+		return "Save failed — duplicate value (check custom domain or username)"
+	}
+	return "Save failed — please try again or check server logs"
 }
 
 func (s *Server) popFlash(r *http.Request) map[string]string {

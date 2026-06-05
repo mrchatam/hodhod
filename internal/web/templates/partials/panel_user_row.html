@@ -1,0 +1,26 @@
+{{define "panel_user_row"}}
+<tr id="pu-row-{{.User.Username}}" class="border-t border-slate-100 hover:bg-slate-50">
+  <td class="p-3 font-mono text-xs">{{.User.Username}}</td>
+  <td class="p-3 text-xs">{{if .User.InboundTag}}{{.User.InboundTag}}{{else}}{{.User.InboundID}}{{end}}</td>
+  <td class="p-3">{{gib .User.UsedBytes}} / {{gib .User.DataLimitBytes}}</td>
+  <td class="p-3">{{time .User.ExpireAt}}</td>
+  <td class="p-3"><span class="badge {{if .User.Enabled}}badge-active{{else}}badge-disabled{{end}}">{{if .User.Enabled}}active{{else}}disabled{{end}}</span></td>
+  <td class="p-3 text-right">
+    <div class="flex flex-wrap justify-end gap-1 items-center">
+      <form class="inline flex flex-wrap gap-1 items-center" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/modify" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+        <input name="volume_gb" type="number" placeholder="GB" class="form-input w-16 text-xs py-1">
+        <input name="expire_at" type="date" class="form-input text-xs py-1">
+        <button type="submit" class="btn btn-secondary btn-sm">Set</button>
+      </form>
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/reset" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm">Reset</button></form>
+      {{if .User.Enabled}}
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/disable" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>
+      {{else}}
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/enable" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>
+      {{end}}
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/delete" hx-target="#pu-row-{{.User.Username}}" hx-swap="delete" hx-confirm="Delete this panel user?"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form>
+    </div>
+  </td>
+</tr>
+{{end}}

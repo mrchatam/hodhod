@@ -37,6 +37,26 @@ func (s *Store) UpdateAgent(ctx context.Context, a *Agent) error {
 	return s.DB.WithContext(ctx).Save(a).Error
 }
 
+// UpdateAgentSettings updates seller profile fields without touching domain columns.
+func (s *Store) UpdateAgentSettings(ctx context.Context, id int64, name string, status AgentStatus, maxBots int, floor, ceiling int64, tgAdminID *int64) error {
+	return s.DB.WithContext(ctx).Model(&Agent{}).Where("id = ?", id).Updates(map[string]any{
+		"name":                name,
+		"status":              status,
+		"max_bots":            maxBots,
+		"price_floor_toman":   floor,
+		"price_ceiling_toman": ceiling,
+		"tg_admin_id":         tgAdminID,
+	}).Error
+}
+
+// AgentDomain returns the custom domain string or empty if unset.
+func AgentDomain(a *Agent) string {
+	if a == nil || a.CustomDomain == nil {
+		return ""
+	}
+	return *a.CustomDomain
+}
+
 // --- Admins ---
 
 func (s *Store) AdminByUsername(ctx context.Context, username string) (*Admin, error) {

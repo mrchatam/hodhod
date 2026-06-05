@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/mrchatam/hodhod/internal/backup"
 	"github.com/mrchatam/hodhod/internal/config"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -23,19 +24,20 @@ type Server struct {
 	Panels         *panels.Registry
 	Telegram       *telegram.Manager
 	Sales          *sales.Service
+	Backup         *backup.Service
 	DomainVerifier *domains.Verifier
 	pages          map[string]*template.Template
 	loginT         *template.Template
 }
 
 // NewServer creates a web server.
-func NewServer(cfg *config.Config, store *db.Store, box *crypto.Box, reg *panels.Registry, tg *telegram.Manager, salesSvc *sales.Service) (*Server, error) {
+func NewServer(cfg *config.Config, store *db.Store, box *crypto.Box, reg *panels.Registry, tg *telegram.Manager, salesSvc *sales.Service, backupSvc *backup.Service) (*Server, error) {
 	pages, loginT, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
 	return &Server{
-		Cfg: cfg, Store: store, Box: box, Panels: reg, Telegram: tg, Sales: salesSvc,
+		Cfg: cfg, Store: store, Box: box, Panels: reg, Telegram: tg, Sales: salesSvc, Backup: backupSvc,
 		DomainVerifier: &domains.Verifier{Resolver: domains.NetResolver{}},
 		pages:          pages, loginT: loginT,
 	}, nil
@@ -89,6 +91,17 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/panels/{id}", s.postPanelUpdate)
 			r.Post("/panels/{id}/disable", s.postPanelDisable)
 			r.Post("/panels/{id}/test", s.testPanel)
+			r.Get("/panels/{id}/users", s.pagePanelUsers)
+			r.Post("/panels/{id}/users", s.postPanelUser)
+			r.Post("/panels/{id}/users/{email}/modify", s.postPanelUserModify)
+			r.Post("/panels/{id}/users/{email}/reset", s.postPanelUserReset)
+			r.Post("/panels/{id}/users/{email}/disable", s.postPanelUserDisable)
+			r.Post("/panels/{id}/users/{email}/enable", s.postPanelUserEnable)
+			r.Post("/panels/{id}/users/{email}/delete", s.postPanelUserDelete)
+			r.Get("/panels/{id}/backups", s.pagePanelBackups)
+			r.Post("/panels/{id}/backups/run", s.postPanelBackupRun)
+			r.Get("/panels/{id}/backups/{backupID}/download", s.getPanelBackupDownload)
+			r.Post("/panels/{id}/backups/settings", s.postPanelBackupSettings)
 			r.Get("/bots", s.pageBots)
 			r.Post("/bots", s.postBot)
 			r.Get("/bots/{id}/settings", s.pageBotSettings)
@@ -106,6 +119,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/bots", s.postAgentBot)
 			r.Get("/bots/{id}/settings", s.pageAgentBotSettings)
 			r.Post("/bots/{id}/settings", s.postAgentBotSettings)
+			r.Get("/panels", s.pageAgentPanels)
 		})
 	})
 	return r

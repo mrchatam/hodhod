@@ -106,3 +106,16 @@ func (r *Registry) TestConnection(ctx context.Context, panelID int64) error {
 	}
 	return c.TestConnection(ctx)
 }
+
+// Backup downloads a native panel database when the client supports it.
+func (r *Registry) Backup(ctx context.Context, panelID int64) (filename string, data []byte, err error) {
+	c, err := r.Get(ctx, panelID)
+	if err != nil {
+		return "", nil, err
+	}
+	b, ok := c.(Backuper)
+	if !ok {
+		return "", nil, fmt.Errorf("panels: backup not supported for this panel type")
+	}
+	return b.Backup(ctx)
+}

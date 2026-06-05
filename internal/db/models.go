@@ -25,7 +25,7 @@ type Agent struct {
 	MaxBots           int         `gorm:"not null;default:5"`
 	PriceFloorToman   int64       `gorm:"not null;default:0"`
 	PriceCeilingToman int64       `gorm:"not null;default:999999999"`
-	CustomDomain      string      `gorm:"uniqueIndex"`
+	CustomDomain      *string
 	DomainEnabled     bool        `gorm:"not null;default:false"`
 	DomainVerifiedAt  *time.Time
 	DomainVerifyToken string `gorm:"not null;default:''"`
@@ -156,6 +156,17 @@ type Panel struct {
 	ExtraJSON   datatypes.JSON `gorm:"type:jsonb;default:'{}'"`
 	Status      string         `gorm:"not null;default:active"`
 	CreatedAt   time.Time
+}
+
+// PanelBackup stores a downloaded panel database snapshot (3x-ui x-ui.db).
+type PanelBackup struct {
+	ID        int64     `gorm:"primaryKey"`
+	PanelID   int64     `gorm:"not null;index"`
+	Filename  string    `gorm:"not null"`
+	SizeBytes int64     `gorm:"not null;default:0"`
+	Status    string    `gorm:"not null;default:ok"`
+	Error     string    `gorm:"not null;default:''"`
+	CreatedAt time.Time
 }
 
 type Bot struct {

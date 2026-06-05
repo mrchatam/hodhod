@@ -1,0 +1,70 @@
+{{define "content"}}
+<div class="flex items-center gap-3 mb-2">
+  <a href="/master/panels/{{.Panel.ID}}" class="btn btn-link btn-sm">← {{.Panel.Name}}</a>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 mb-2">Backups</h2>
+<p class="text-sm text-slate-500 mb-6">Automatic and on-demand 3x-ui database backups</p>
+
+{{if not .SupportsBackup}}
+<div class="mb-6 px-4 py-3 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 text-sm">
+  Backup is only supported for 3x-ui panels.
+</div>
+{{else}}
+<form method="post" action="/master/panels/{{.Panel.ID}}/backups/run" class="mb-6">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <button type="submit" class="btn btn-primary">Back up now</button>
+</form>
+{{end}}
+
+<div class="grid lg:grid-cols-2 gap-6">
+  <div class="bg-white rounded-xl border overflow-hidden">
+    <h3 class="font-semibold p-4 border-b">Stored backups</h3>
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500">
+        <tr><th class="text-left p-3">Date</th><th class="text-left p-3">Size</th><th class="text-left p-3">Status</th><th class="text-right p-3"></th></tr>
+      </thead>
+      <tbody>
+      {{range .Backups}}
+      <tr class="border-t">
+        <td class="p-3">{{time .CreatedAt}}</td>
+        <td class="p-3">{{gib .SizeBytes}}</td>
+        <td class="p-3"><span class="badge {{if eq .Status "ok"}}badge-active{{else}}badge-disabled{{end}}">{{.Status}}</span></td>
+        <td class="p-3 text-right">
+          {{if eq .Status "ok"}}<a href="/master/panels/{{$.Panel.ID}}/backups/{{.ID}}/download" class="btn btn-secondary btn-sm">Download</a>{{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4" class="p-6 text-center text-slate-400">No backups yet.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="post" action="/master/panels/{{.Panel.ID}}/backups/settings" class="bg-white rounded-xl border p-6 space-y-4 h-fit">
+    <h3 class="font-semibold">Schedule &amp; retention</h3>
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="backup_enabled" {{if eq (index .Settings "backup_enabled") "1"}}checked{{end}}>
+      Enable scheduled backups
+    </label>
+    <label class="form-field">
+      <span class="form-label">Cron expression (optional override)</span>
+      <input name="backup_cron" value="{{index .Settings "backup_cron"}}" class="form-input" placeholder="0 3 * * *">
+      <p class="form-hint">Global default from CRON_BACKUP env is used when empty.</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">Retention count</span>
+      <input name="backup_retention" type="number" value="{{index .Settings "backup_retention"}}" class="form-input" min="1">
+    </label>
+    <label class="form-field">
+      <span class="form-label">Telegram bot token (optional)</span>
+      <input name="backup_tg_bot_token" type="password" class="form-input" placeholder="Leave empty to keep current">
+    </label>
+    <label class="form-field">
+      <span class="form-label">Telegram chat ID</span>
+      <input name="backup_tg_chat_id" value="{{index .Settings "backup_tg_chat_id"}}" class="form-input" placeholder="-1001234567890">
+    </label>
+    <button type="submit" class="btn btn-primary">Save settings</button>
+  </form>
+</div>
+{{end}}

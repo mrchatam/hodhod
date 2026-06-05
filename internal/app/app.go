@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/mrchatam/hodhod/internal/billing"
+	"github.com/mrchatam/hodhod/internal/backup"
 	"github.com/mrchatam/hodhod/internal/config"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -67,6 +68,7 @@ func Run() error {
 
 	panelReg := panels.NewRegistry(box, httpClient, store)
 	salesSvc := &sales.Service{Store: store, Panels: panelReg}
+	backupSvc := &backup.Service{Store: store, Panels: panelReg, Box: box, Dir: cfg.BackupDir}
 	wallet := &billing.WalletService{Store: store}
 	orders := &billing.OrderService{Store: store, Wallet: wallet}
 	prov := &provisioning.Service{Store: store, Sales: salesSvc}
@@ -76,15 +78,15 @@ func Run() error {
 		slog.Warn("load bots", "err", err)
 	}
 
-	webSrv, err := webpkg.NewServer(cfg, store, box, panelReg, tgMgr, salesSvc)
+	webSrv, err := webpkg.NewServer(cfg, store, box, panelReg, tgMgr, salesSvc, backupSvc)
 	if err != nil {
 		return err
 	}
 
 	mini := &miniapp.API{Store: store, Box: box, Orders: orders, Wallet: wallet, Prov: prov}
 
-	sched := scheduler.New(store, panelReg, tgMgr, cfg.PanelPollWorkers)
-	sched.Start(cfg.CronUsagePoll, cfg.CronExpiryCheck)
+	sched := scheduler.New(store, panelReg, tgMgr, backupSvc, cfg.PanelPollWorkers)
+	sched.Start(cfg.CronUsagePoll, cfg.CronExpiryCheck, cfg.CronBackup)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, webpkg.RateLimitWebhook)
