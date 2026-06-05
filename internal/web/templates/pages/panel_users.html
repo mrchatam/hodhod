@@ -1,62 +1,187 @@
 {{define "content"}}
-<div class="flex items-center gap-3 mb-2">
-  <a href="/master/panels/{{.Panel.ID}}" class="btn btn-link btn-sm">← {{.Panel.Name}}</a>
-</div>
-<h2 class="text-2xl font-bold text-slate-900 mb-2">Panel users</h2>
-<p class="text-sm text-slate-500 mb-6">Live users from {{.Panel.Type}} panel (not Hodhod services)</p>
-
-<form method="get" action="/master/panels/{{.Panel.ID}}/users" class="mb-4 flex gap-2 flex-wrap">
-  <input name="q" value="{{.Query}}" placeholder="Search email" class="form-input max-w-xs">
-  <select name="inbound" class="form-input max-w-[10rem]">
-    <option value="">All inbounds</option>
-    {{range .Inbounds}}<option value="{{.ID}}" {{if eq $.InboundFilter (printf "%d" .ID)}}selected{{end}}>{{.ID}}: {{.Tag}}</option>{{end}}
-  </select>
-  <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
-</form>
-
-<form method="post" action="/master/panels/{{.Panel.ID}}/users" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg mb-6">
-  <h3 class="font-semibold">Create user</h3>
-  <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <label class="form-field">
-    <span class="form-label">Email / username</span>
-    <input name="username" class="form-input" required placeholder="user@shop">
-  </label>
-  {{if .Inbounds}}
-  <label class="form-field">
-    <span class="form-label">Inbound</span>
-    <select name="inbound_id" class="form-input">
-      {{range .Inbounds}}<option value="{{.ID}}">{{.ID}}: {{.Tag}}</option>{{end}}
-    </select>
-  </label>
-  {{end}}
-  <div class="grid grid-cols-2 gap-4">
-    <label class="form-field"><span class="form-label">Volume (GB)</span><input name="volume_gb" type="number" value="30" class="form-input"></label>
-    <label class="form-field"><span class="form-label">Duration (days)</span><input name="duration_days" type="number" value="30" class="form-input"></label>
-  </div>
-  <label class="form-field"><span class="form-label">IP limit (0 = unlimited)</span><input name="ip_limit" type="number" value="0" class="form-input"></label>
-  <label class="form-field"><span class="form-label">Note</span><input name="note" class="form-input" placeholder="Optional comment"></label>
-  <button type="submit" class="btn btn-primary">Create on panel</button>
-</form>
-
-<div class="bg-white rounded-xl border overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500">
-      <tr>
-        <th class="text-left p-3">User</th>
-        <th class="text-left p-3">Inbound</th>
-        <th class="text-left p-3">Usage</th>
-        <th class="text-left p-3">Expires</th>
-        <th class="text-left p-3">Status</th>
-        <th class="text-right p-3">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-    {{range .Users}}
-    {{template "panel_user_row" (dict "User" . "Panel" $.Panel "CSRF" $.CSRF)}}
-    {{else}}
-    <tr><td colspan="6" class="p-8 text-center text-slate-400">No users on this panel.</td></tr>
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+  <div>
+    <div class="flex items-center gap-3 mb-1">
+      <a href="/master/panels/{{.Panel.ID}}" class="btn btn-link btn-sm">← {{.Panel.Name}}</a>
+    </div>
+    <h2 class="text-2xl font-bold text-slate-900">Panel users</h2>
+    <p class="text-sm text-slate-500 mt-1">
+      {{.Stats.PanelCount}} on panel · {{.Stats.HodhodCount}} Hodhod services · {{.Stats.Shown}} shown
+      · <a href="/services?panel_id={{.Panel.ID}}" class="text-brand-600 hover:underline">View in Services</a>
+    </p>
+    {{if .PanelListErr}}
+    <div class="alert-err mt-3">Could not load live panel list: {{.PanelListErr.Error}} — showing Hodhod records only.</div>
     {{end}}
-    </tbody>
-  </table>
+  </div>
 </div>
+
+<form method="get" action="/master/panels/{{.Panel.ID}}/users" class="bg-white rounded-xl border p-4 mb-4 space-y-3">
+  <div class="flex flex-wrap gap-3 items-end">
+    <label class="form-field flex-1 min-w-[10rem]">
+      <span class="form-label">Search</span>
+      <input name="q" value="{{.Filters.Query}}" placeholder="Username or label" class="form-input">
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">Inbound</span>
+      <select name="inbound" class="form-input">
+        <option value="">All</option>
+        {{range .Inbounds}}<option value="{{.ID}}" {{if eq $.Filters.Inbound (printf "%d" .ID)}}selected{{end}}>{{.ID}}: {{.Tag}}</option>{{end}}
+      </select>
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">Status</span>
+      <select name="status" class="form-input">
+        <option value="all" {{if eq .Filters.Status "all"}}selected{{end}}>All</option>
+        <option value="active" {{if eq .Filters.Status "active"}}selected{{end}}>Active</option>
+        <option value="disabled" {{if eq .Filters.Status "disabled"}}selected{{end}}>Disabled</option>
+        <option value="expired" {{if eq .Filters.Status "expired"}}selected{{end}}>Expired</option>
+      </select>
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">Source</span>
+      <select name="source" class="form-input">
+        <option value="">All</option>
+        <option value="panel" {{if eq .Filters.Source "panel"}}selected{{end}}>Panel only</option>
+        <option value="hodhod" {{if eq .Filters.Source "hodhod"}}selected{{end}}>Hodhod</option>
+        <option value="both" {{if eq .Filters.Source "both"}}selected{{end}}>Both</option>
+      </select>
+    </label>
+    {{if .IsMaster}}
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">Agent</span>
+      <select name="agent_id" class="form-input">
+        <option value="">All agents</option>
+        {{range .Agents}}<option value="{{.ID}}" {{if eq $.Filters.AgentID .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    {{end}}
+    <button type="submit" class="btn btn-secondary btn-sm"><span class="spinner"></span><span class="btn-label">Filter</span></button>
+    <a href="/master/panels/{{.Panel.ID}}/users" class="btn btn-muted btn-sm">Clear</a>
+  </div>
+  {{if or .Filters.Query .Filters.Inbound (ne .Filters.Status "all") .Filters.Source .Filters.AgentID}}
+  <div class="flex flex-wrap gap-2 pt-1">
+    {{if .Filters.Query}}<span class="filter-chip">Search: {{.Filters.Query}}</span>{{end}}
+    {{if .Filters.Inbound}}<span class="filter-chip">Inbound {{.Filters.Inbound}}</span>{{end}}
+    {{if ne .Filters.Status "all"}}<span class="filter-chip">Status: {{.Filters.Status}}</span>{{end}}
+    {{if .Filters.Source}}<span class="filter-chip">Source: {{.Filters.Source}}</span>{{end}}
+  </div>
+  {{end}}
+</form>
+
+<div class="grid xl:grid-cols-5 gap-6">
+  <div class="xl:col-span-2 space-y-4">
+    {{if .Templates}}
+    <div class="bg-white rounded-xl border p-4">
+      <h3 class="font-semibold text-slate-800 mb-2">Templates</h3>
+      <div class="flex flex-wrap gap-2">
+        {{range .Templates}}
+        <button type="button" class="btn btn-secondary btn-sm template-pick" data-name="{{.Name}}" data-volume="{{.VolumeGB}}" data-days="{{.DurationDays}}" data-ip="{{.IPLimit}}" data-note="{{.Note}}" data-inbounds="{{range $i, $id := .InboundIDs}}{{if $i}},{{end}}{{$id}}{{end}}">{{.Name}}</button>
+        {{end}}
+      </div>
+      {{if .Templates}}<ul class="mt-3 space-y-1 text-xs text-slate-500">{{range .Templates}}
+        <li class="flex justify-between items-center"><span>{{.Name}} · {{.VolumeGB}}GB / {{.DurationDays}}d · inbounds {{.InboundIDs}}</span>
+        <form method="post" action="/master/panels/{{$.Panel.ID}}/users/templates/{{urlPath .Name}}/delete" class="inline" onsubmit="return confirm('Delete template?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-link btn-link-danger btn-sm">Delete</button></form></li>
+      {{end}}</ul>{{end}}
+    </div>
+    {{end}}
+
+    <form id="panel-user-create" method="post" action="/master/panels/{{.Panel.ID}}/users" hx-post="/master/panels/{{.Panel.ID}}/users" hx-target="#create-status" hx-swap="innerHTML" class="bg-white rounded-xl border p-5 space-y-4">
+      <h3 class="font-semibold text-slate-800">Create user</h3>
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <div id="create-status"></div>
+      <label class="form-field">
+        <span class="form-label">Email / username</span>
+        <input name="username" id="create-username" class="form-input" required placeholder="user@shop">
+      </label>
+      {{if .Inbounds}}
+      <div class="form-field">
+        <span class="form-label">Inbounds <span class="text-slate-400 font-normal">(select one or more)</span></span>
+        <div class="inbound-grid mt-1">
+          {{range .Inbounds}}
+          <label><input type="checkbox" name="inbound_ids" value="{{.ID}}" class="inbound-cb"> {{.ID}}: {{.Tag}}</label>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-field"><span class="form-label">Volume (GB)</span><input name="volume_gb" id="create-volume" type="number" value="30" class="form-input"></label>
+        <label class="form-field"><span class="form-label">Duration (days)</span><input name="duration_days" id="create-days" type="number" value="30" class="form-input"></label>
+      </div>
+      <label class="form-field"><span class="form-label">IP limit (0 = unlimited)</span><input name="ip_limit" id="create-ip" type="number" value="0" class="form-input"></label>
+      <label class="form-field"><span class="form-label">Note</span><input name="note" id="create-note" class="form-input" placeholder="Optional"></label>
+      <div class="flex flex-wrap gap-2 pt-1">
+        <button type="submit" class="btn btn-primary" data-busy-text="Creating…"><span class="spinner"></span><span class="btn-label">Create on panel</span></button>
+      </div>
+    </form>
+
+    <form method="post" action="/master/panels/{{.Panel.ID}}/users/templates" class="bg-slate-50 rounded-xl border border-dashed p-4 space-y-3">
+      <h4 class="text-sm font-semibold text-slate-700">Save current form as template</h4>
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <input type="hidden" name="volume_gb" id="tpl-volume" value="30">
+      <input type="hidden" name="duration_days" id="tpl-days" value="30">
+      <input type="hidden" name="ip_limit" id="tpl-ip" value="0">
+      <input type="hidden" name="note" id="tpl-note" value="">
+      <div id="tpl-inbound-hidden"></div>
+      <label class="form-field">
+        <span class="form-label">Template name</span>
+        <input name="template_name" class="form-input" placeholder="Standard 30d" required>
+      </label>
+      <button type="submit" class="btn btn-secondary btn-sm" data-busy-text="Saving…" onclick="syncTemplateForm()"><span class="spinner"></span><span class="btn-label">Save template</span></button>
+    </form>
+  </div>
+
+  <div class="xl:col-span-3 bg-white rounded-xl border overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[640px]">
+        <thead class="bg-slate-50 text-slate-500">
+          <tr>
+            <th class="text-left p-3">User</th>
+            <th class="text-left p-3">Inbounds</th>
+            <th class="text-left p-3">Usage</th>
+            <th class="text-left p-3">Expires</th>
+            <th class="text-left p-3">Source</th>
+            <th class="text-left p-3">Status</th>
+            <th class="text-right p-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="panel-users-tbody">
+        {{range .Rows}}
+        {{template "panel_user_row" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "InboundTagMap" $.InboundTagMap)}}
+        {{else}}
+        <tr><td colspan="7" class="p-10 text-center text-slate-400">No users match the current filters.</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function applyTemplate(btn) {
+  document.getElementById('create-volume').value = btn.dataset.volume || 30;
+  document.getElementById('create-days').value = btn.dataset.days || 30;
+  document.getElementById('create-ip').value = btn.dataset.ip || 0;
+  document.getElementById('create-note').value = btn.dataset.note || '';
+  var ids = (btn.dataset.inbounds || '').split(',').filter(Boolean);
+  document.querySelectorAll('.inbound-cb').forEach(function(cb) {
+    cb.checked = ids.indexOf(cb.value) !== -1;
+  });
+}
+document.querySelectorAll('.template-pick').forEach(function(btn) {
+  btn.addEventListener('click', function() { applyTemplate(btn); });
+});
+function syncTemplateForm() {
+  document.getElementById('tpl-volume').value = document.getElementById('create-volume').value;
+  document.getElementById('tpl-days').value = document.getElementById('create-days').value;
+  document.getElementById('tpl-ip').value = document.getElementById('create-ip').value;
+  document.getElementById('tpl-note').value = document.getElementById('create-note').value;
+  var box = document.getElementById('tpl-inbound-hidden');
+  box.innerHTML = '';
+  document.querySelectorAll('.inbound-cb:checked').forEach(function(cb) {
+    var inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'inbound_ids'; inp.value = cb.value;
+    box.appendChild(inp);
+  });
+}
+</script>
 {{end}}

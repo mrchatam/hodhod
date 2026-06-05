@@ -43,6 +43,7 @@ Non-interactive env vars:
   HODHOD_IMAGE          override prebuilt image
   HODHOD_USE_DOCKER_MIRROR  1 to enable Arvan docker.io mirror
   HODHOD_SKIP_DOCKER_MIRROR 1 to skip mirror prompt
+  HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default on Update)
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -581,7 +582,8 @@ handle_image_unavailable() {
         ui_warn "Building locally — requires network access to Debian/Alpine package mirrors."
         DEPLOY_MODE=build
         write_env
-        docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build hodhod-app
+        compose_build_app 0
+        compose_up_build_app
         return 0
         ;;
       *) ui_err "Pick 1, 2, or 3." ;;
@@ -615,12 +617,27 @@ compose_up_db() {
   fi
 }
 
+# Build hodhod-app from source. Pass 1 for --no-cache (Update default after compose down -v).
+compose_build_app() {
+  local no_cache="${1:-0}"
+  local build_args=(--pull)
+  if [[ "$no_cache" == "1" ]]; then
+    build_args+=(--no-cache)
+  fi
+  ui_hint "Building image from source${no_cache:+ without cache} (this may take a few minutes)..."
+  ui_warn "Local builds need network access to package registries."
+  docker compose -f docker-compose.yml -f docker-compose.build.yml build "${build_args[@]}" hodhod-app
+}
+
+compose_up_build_app() {
+  docker compose -f docker-compose.yml -f docker-compose.build.yml up -d hodhod-app
+}
+
 start_docker_app() {
   export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
   if [[ "$DEPLOY_MODE" == "build" ]]; then
-    ui_hint "Building image from source (this may take a few minutes)..."
-    ui_warn "Local builds need network access to package registries."
-    docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build hodhod-app
+    compose_build_app 0
+    compose_up_build_app
     return
   fi
   ui_hint "Pulling prebuilt image: ${HODHOD_IMAGE}"
@@ -632,10 +649,11 @@ start_docker_app() {
 }
 
 install_native_binary() {
+  local force="${1:-0}"
   local bindir="$ROOT/bin"
   mkdir -p "$bindir"
   local bin="$bindir/hodhod"
-  if [[ -f "$bin" && -x "$bin" ]]; then
+  if [[ -f "$bin" && -x "$bin" && "$force" != "1" ]]; then
     ui_ok "Binary already present: $bin"
     return 0
   fi
@@ -812,12 +830,17 @@ do_update() {
   check_prereqs || return 1
   load_env
   export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
+  local build_no_cache="${HODHOD_BUILD_NO_CACHE:-1}"
   if [[ "$DEPLOY_MODE" == "native" ]]; then
-    install_native_binary
+    compose_up_db
+    install_native_binary 1
     maybe_sudo systemctl restart hodhod
   elif [[ "$DEPLOY_MODE" == "build" ]]; then
-    docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build hodhod-app
+    compose_up_db
+    compose_build_app "$build_no_cache"
+    compose_up_build_app
   else
+    compose_up_db
     pull_hodhod_image || { ui_err "Failed to pull ${HODHOD_IMAGE}"; return 1; }
     docker compose up -d hodhod-app
   fi

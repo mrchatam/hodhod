@@ -320,11 +320,65 @@ func (c *xuiClient) ListInbounds(ctx context.Context) ([]InboundInfo, error) {
 }
 
 func (c *xuiClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
+	users, err := c.listUsersViaClientsAPI(ctx)
+	if err == nil {
+		return users, nil
+	}
+	return c.listUsersViaInbounds(ctx)
+}
+
+func (c *xuiClient) listUsersViaClientsAPI(ctx context.Context) ([]UserInfo, error) {
+	var raw []map[string]any
+	if err := c.do(ctx, http.MethodGet, "/panel/api/clients/list", nil, &raw); err != nil {
+		return nil, err
+	}
+	out := make([]UserInfo, 0, len(raw))
+	for _, cl := range raw {
+		u := UserInfo{Enabled: true, Raw: cl}
+		if v, ok := cl["email"].(string); ok {
+			u.Username = v
+		}
+		if u.Username == "" {
+			continue
+		}
+		if v, ok := cl["enable"].(bool); ok {
+			u.Enabled = v
+		}
+		if v, ok := cl["totalGB"].(float64); ok {
+			u.DataLimitBytes = int64(v)
+		}
+		if v, ok := cl["expiryTime"].(float64); ok && v > 0 {
+			u.ExpireAt = time.UnixMilli(int64(v))
+		}
+		if v, ok := cl["limitIp"].(float64); ok {
+			u.LimitIP = int(v)
+		}
+		if v, ok := cl["comment"].(string); ok {
+			u.Note = v
+		}
+		u.InboundIDs = xuiParseIntSlice(cl["inboundIds"])
+		if len(u.InboundIDs) > 0 {
+			u.InboundID = u.InboundIDs[0]
+		}
+		if tr, ok := cl["traffic"].(map[string]any); ok {
+			if v, ok := tr["up"].(float64); ok {
+				u.UsedBytes += int64(v)
+			}
+			if v, ok := tr["down"].(float64); ok {
+				u.UsedBytes += int64(v)
+			}
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
+func (c *xuiClient) listUsersViaInbounds(ctx context.Context) ([]UserInfo, error) {
 	var raw []map[string]any
 	if err := c.do(ctx, http.MethodGet, "/panel/api/inbounds/list", nil, &raw); err != nil {
 		return nil, err
 	}
-	var out []UserInfo
+	byEmail := map[string]*UserInfo{}
 	for _, inbound := range raw {
 		inboundID := 0
 		if v, ok := inbound["id"].(float64); ok {
@@ -344,35 +398,33 @@ func (c *xuiClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
 				}
 			}
 		}
-		settingsStr, _ := inbound["settings"].(string)
-		if settingsStr == "" {
-			continue
-		}
-		var settings struct {
-			Clients []map[string]any `json:"clients"`
-		}
-		if err := json.Unmarshal([]byte(settingsStr), &settings); err != nil {
-			continue
-		}
-		for _, cl := range settings.Clients {
+		for _, cl := range xuiParseSettingsClients(inbound["settings"]) {
 			email, _ := cl["email"].(string)
 			if email == "" {
 				continue
 			}
-			u := UserInfo{
-				Username:   email,
-				InboundID:  inboundID,
-				InboundTag: tag,
-				Enabled:    true,
-				Raw:        cl,
+			u, ok := byEmail[email]
+			if !ok {
+				u = &UserInfo{Username: email, Enabled: true, Raw: cl}
+				byEmail[email] = u
+			}
+			u.InboundIDs = appendUniqueInt(u.InboundIDs, inboundID)
+			if u.InboundID == 0 {
+				u.InboundID = inboundID
+			}
+			if tag != "" {
+				u.InboundTags = appendUniqueStr(u.InboundTags, tag)
+				if u.InboundTag == "" {
+					u.InboundTag = tag
+				}
 			}
 			if v, ok := cl["enable"].(bool); ok {
 				u.Enabled = v
 			}
-			if v, ok := cl["totalGB"].(float64); ok {
+			if v, ok := cl["totalGB"].(float64); ok && u.DataLimitBytes == 0 {
 				u.DataLimitBytes = int64(v)
 			}
-			if v, ok := cl["expiryTime"].(float64); ok && v > 0 {
+			if v, ok := cl["expiryTime"].(float64); ok && v > 0 && u.ExpireAt.IsZero() {
 				u.ExpireAt = time.UnixMilli(int64(v))
 			}
 			if v, ok := cl["limitIp"].(float64); ok {
@@ -389,10 +441,79 @@ func (c *xuiClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
 					u.UsedBytes += int64(v)
 				}
 			}
-			out = append(out, u)
 		}
 	}
+	out := make([]UserInfo, 0, len(byEmail))
+	for _, u := range byEmail {
+		out = append(out, *u)
+	}
 	return out, nil
+}
+
+func xuiParseSettingsClients(settingsRaw any) []map[string]any {
+	switch v := settingsRaw.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		var settings struct {
+			Clients []map[string]any `json:"clients"`
+		}
+		if err := json.Unmarshal([]byte(v), &settings); err != nil {
+			return nil
+		}
+		return settings.Clients
+	case map[string]any:
+		clientsRaw, ok := v["clients"]
+		if !ok {
+			return nil
+		}
+		switch cl := clientsRaw.(type) {
+		case []any:
+			out := make([]map[string]any, 0, len(cl))
+			for _, item := range cl {
+				if m, ok := item.(map[string]any); ok {
+					out = append(out, m)
+				}
+			}
+			return out
+		case []map[string]any:
+			return cl
+		}
+	}
+	return nil
+}
+
+func xuiParseIntSlice(v any) []int {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]int, 0, len(arr))
+	for _, item := range arr {
+		if n, ok := item.(float64); ok {
+			out = append(out, int(n))
+		}
+	}
+	return out
+}
+
+func appendUniqueInt(s []int, v int) []int {
+	for _, x := range s {
+		if x == v {
+			return s
+		}
+	}
+	return append(s, v)
+}
+
+func appendUniqueStr(s []string, v string) []string {
+	for _, x := range s {
+		if x == v {
+			return s
+		}
+	}
+	return append(s, v)
 }
 
 func (c *xuiClient) Backup(ctx context.Context) (string, []byte, error) {

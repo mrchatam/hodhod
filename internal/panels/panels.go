@@ -44,7 +44,9 @@ type UserInfo struct {
 	Enabled         bool
 	SubscriptionURL string
 	InboundID       int
+	InboundIDs      []int
 	InboundTag      string
+	InboundTags     []string
 	LimitIP         int
 	Note            string
 	Raw             map[string]any

@@ -31,6 +31,7 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		"agentDomain": db.AgentDomain,
 		"dict":        templateDict,
 		"urlPath":     urlPathEscape,
+		"inboundLabel": formatInboundLabels,
 	}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {

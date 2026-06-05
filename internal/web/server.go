@@ -98,6 +98,8 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/panels/{id}/users/{email}/disable", s.postPanelUserDisable)
 			r.Post("/panels/{id}/users/{email}/enable", s.postPanelUserEnable)
 			r.Post("/panels/{id}/users/{email}/delete", s.postPanelUserDelete)
+			r.Post("/panels/{id}/users/templates", s.postPanelUserTemplate)
+			r.Post("/panels/{id}/users/templates/{name}/delete", s.postPanelUserTemplateDelete)
 			r.Get("/panels/{id}/backups", s.pagePanelBackups)
 			r.Post("/panels/{id}/backups/run", s.postPanelBackupRun)
 			r.Get("/panels/{id}/backups/{backupID}/download", s.getPanelBackupDownload)

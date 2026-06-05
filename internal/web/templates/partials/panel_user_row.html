@@ -1,26 +1,38 @@
 {{define "panel_user_row"}}
-<tr id="pu-row-{{.User.Username}}" class="border-t border-slate-100 hover:bg-slate-50">
-  <td class="p-3 font-mono text-xs">{{.User.Username}}</td>
-  <td class="p-3 text-xs">{{if .User.InboundTag}}{{.User.InboundTag}}{{else}}{{.User.InboundID}}{{end}}</td>
-  <td class="p-3">{{gib .User.UsedBytes}} / {{gib .User.DataLimitBytes}}</td>
-  <td class="p-3">{{time .User.ExpireAt}}</td>
-  <td class="p-3"><span class="badge {{if .User.Enabled}}badge-active{{else}}badge-disabled{{end}}">{{if .User.Enabled}}active{{else}}disabled{{end}}</span></td>
+<tr id="pu-row-{{.Row.Username}}" class="border-t border-slate-100 hover:bg-slate-50 {{if .Row.HodhodOnly}}bg-amber-50/40{{end}}">
+  <td class="p-3">
+    <p class="font-mono text-xs">{{.Row.Username}}</p>
+    {{if .Row.Label}}<p class="text-xs text-slate-500 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
+    {{if .Row.HodhodOnly}}<p class="text-xs text-amber-700 mt-0.5">Not found on panel API</p>{{end}}
+  </td>
+  <td class="p-3 text-xs">{{inboundLabel .Row.InboundIDs .Row.InboundTags $.InboundTagMap}}</td>
+  <td class="p-3 whitespace-nowrap">{{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</td>
+  <td class="p-3 whitespace-nowrap">{{time .Row.ExpireAt}}</td>
+  <td class="p-3"><span class="badge badge-active">{{.Row.Source}}</span></td>
+  <td class="p-3"><span class="badge {{if eq .Row.Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Row.Status}}</span></td>
   <td class="p-3 text-right">
-    <div class="flex flex-wrap justify-end gap-1 items-center">
-      <form class="inline flex flex-wrap gap-1 items-center" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/modify" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML">
-        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-        <input name="volume_gb" type="number" placeholder="GB" class="form-input w-16 text-xs py-1">
-        <input name="expire_at" type="date" class="form-input text-xs py-1">
-        <button type="submit" class="btn btn-secondary btn-sm">Set</button>
-      </form>
-      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/reset" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm">Reset</button></form>
-      {{if .User.Enabled}}
-      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/disable" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>
+    {{if not .Row.HodhodOnly}}
+    <div class="flex flex-wrap justify-end gap-1">
+      <details class="inline-block">
+        <summary class="btn btn-muted btn-sm cursor-pointer">Set</summary>
+        <form class="mt-1 p-2 bg-white border rounded-lg shadow-sm space-y-1 min-w-[10rem]" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/modify" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <input name="volume_gb" type="number" placeholder="GB" class="form-input text-xs py-1">
+          <input name="expire_at" type="date" class="form-input text-xs py-1">
+          <button type="submit" class="btn btn-secondary btn-sm w-full" data-busy-text="Saving…"><span class="spinner"></span><span class="btn-label">Apply</span></button>
+        </form>
+      </details>
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/reset" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm" data-busy-text="…"><span class="spinner"></span><span class="btn-label">Reset</span></button></form>
+      {{if .Row.Enabled}}
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/disable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm" data-busy-text="…"><span class="spinner"></span><span class="btn-label">Off</span></button></form>
       {{else}}
-      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/enable" hx-target="#pu-row-{{.User.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/enable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm" data-busy-text="…"><span class="spinner"></span><span class="btn-label">On</span></button></form>
       {{end}}
-      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .User.Username}}/delete" hx-target="#pu-row-{{.User.Username}}" hx-swap="delete" hx-confirm="Delete this panel user?"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form>
+      <form class="inline" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/delete" hx-target="#pu-row-{{.Row.Username}}" hx-swap="delete" hx-confirm="Delete this panel user?"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm" data-busy-text="…"><span class="spinner"></span><span class="btn-label">Del</span></button></form>
     </div>
+    {{else if .Row.ServiceID}}
+    <a href="/services?q={{urlPath .Row.Username}}" class="btn btn-secondary btn-sm">Services</a>
+    {{end}}
   </td>
 </tr>
 {{end}}

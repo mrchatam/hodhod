@@ -443,6 +443,17 @@ func (s *Store) ListActiveServicesForPanel(ctx context.Context, panelID int64) (
 	return out, s.DB.WithContext(ctx).Where("panel_id = ? AND status = ?", panelID, "active").Find(&out).Error
 }
 
+func (s *Store) ListServicesForPanel(ctx context.Context, panelID int64) ([]Service, error) {
+	var out []Service
+	return out, s.DB.WithContext(ctx).Where("panel_id = ?", panelID).Order("id DESC").Find(&out).Error
+}
+
+func (s *Store) GetServiceByPanelUsername(ctx context.Context, panelID int64, username string) (*Service, error) {
+	var svc Service
+	err := s.DB.WithContext(ctx).Where("panel_id = ? AND panel_username = ?", panelID, username).Order("id DESC").First(&svc).Error
+	return &svc, err
+}
+
 func (s *Store) UpdateService(ctx context.Context, botID int64, svc *Service) error {
 	return s.DB.WithContext(ctx).Where("bot_id = ?", botID).Save(svc).Error
 }
