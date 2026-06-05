@@ -16,9 +16,7 @@ services:
 
   hodhod-app:
     image: ${HODHOD_IMAGE:-ghcr.io/mrchatam/hodhod:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
+    pull_policy: missing
     depends_on:
       hodhod-db:
         condition: service_healthy
@@ -33,7 +31,7 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "/app/hodhod", "healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 5

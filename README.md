@@ -64,7 +64,18 @@ export CERTBOT_EMAIL=you@example.com
 bash install.sh --non-interactive
 ```
 
-Prebuilt images are published to `ghcr.io/mrchatam/hodhod:latest` on each `v*` tag (see `.github/workflows/release.yml`). Until the first release, the installer falls back to building from source automatically.
+Prebuilt images are published to `ghcr.io/mrchatam/hodhod:latest` on each push to `main` and on `v*` tags (see `.github/workflows/release.yml`).
+
+### Restricted networks (Iran / blocked CDNs)
+
+Production installs should **pull the prebuilt GHCR image** — no local Docker build on the server.
+
+| Registry | Arvan mirror helps? | If blocked |
+|----------|---------------------|------------|
+| `docker.io` (Postgres base image) | Yes — installer can enable Arvan mirror | Enable mirror in install prompt |
+| `ghcr.io` (Hodhod app image) | No | Use **native** deploy mode (downloads GitHub release binary) |
+
+If `docker pull ghcr.io/mrchatam/hodhod:latest` fails, re-run the installer and choose **native** mode, or set `DEPLOY_MODE=native` for non-interactive installs. Local **build** mode is developer-only and may fail when Alpine/Debian package mirrors are unreachable.
 
 Installer menu options: update stack, remove stack, logs, status, regenerate secrets, **reconfigure Nginx + SSL**.
 

@@ -1,0 +1,5 @@
+services:
+  hodhod-app:
+    build:
+      context: .
+      dockerfile: Dockerfile

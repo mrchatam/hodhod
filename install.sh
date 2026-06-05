@@ -40,6 +40,8 @@ Non-interactive env vars:
   HTTP_PORT             default: 8080
   DEPLOY_MODE           docker | build | native
   HODHOD_IMAGE          override prebuilt image
+  HODHOD_USE_DOCKER_MIRROR  1 to enable Arvan docker.io mirror
+  HODHOD_SKIP_DOCKER_MIRROR 1 to skip mirror prompt
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -401,6 +403,131 @@ EOF
   chmod 600 "$ENV_FILE"
 }
 
+# ── Docker registry mirror (optional, helps docker.io in Iran) ────────────────
+prompt_docker_registry_mirror() {
+  if [[ "${HODHOD_SKIP_DOCKER_MIRROR:-0}" == "1" ]]; then
+    HODHOD_USE_DOCKER_MIRROR=0
+    ui_hint "Docker mirror skipped (HODHOD_SKIP_DOCKER_MIRROR=1)."
+    return 0
+  fi
+  if [[ "${HODHOD_USE_DOCKER_MIRROR:-}" == "1" ]]; then
+    ui_hint "Docker mirror enabled via HODHOD_USE_DOCKER_MIRROR=1."
+    return 0
+  fi
+  if [[ "${HODHOD_USE_DOCKER_MIRROR:-}" == "0" ]]; then
+    ui_hint "Docker mirror disabled via HODHOD_USE_DOCKER_MIRROR=0."
+    return 0
+  fi
+  if $NON_INTERACTIVE; then
+    HODHOD_USE_DOCKER_MIRROR=0
+    return 0
+  fi
+  echo ""
+  ui_line
+  echo "  ${UI_BOLD}Docker registry mirror (optional)${UI_RESET}"
+  ui_hint "Arvan Cloud mirror can speed up docker.io pulls in Iran."
+  ui_hint "GHCR (ghcr.io) is not mirrored — use native mode if GHCR is blocked."
+  local mirror_choice
+  prompt_yes_no mirror_choice "Use Arvan Cloud Docker registry mirror?" "n"
+  if [[ "$mirror_choice" == "yes" ]]; then
+    HODHOD_USE_DOCKER_MIRROR=1
+    ui_ok "Docker mirror enabled."
+  else
+    HODHOD_USE_DOCKER_MIRROR=0
+    ui_hint "Using default Docker registry (no mirror)."
+  fi
+}
+
+configure_docker_registry_mirrors() {
+  prompt_docker_registry_mirror
+  [[ "${HODHOD_USE_DOCKER_MIRROR:-0}" == "1" ]] || return 0
+
+  ui_hint "Configuring Docker registry mirrors (Arvan Cloud)..."
+  maybe_sudo mkdir -p /etc/docker
+
+  local mirror_backup=""
+  if [[ -f /etc/docker/daemon.json ]]; then
+    mirror_backup="/etc/docker/daemon.json.bak.$(date +%s)"
+    maybe_sudo cp /etc/docker/daemon.json "$mirror_backup" || true
+  fi
+
+  maybe_sudo bash -c 'cat > /etc/docker/daemon.json <<EOF
+{
+  "insecure-registries": ["https://docker.arvancloud.ir"],
+  "registry-mirrors": ["https://docker.arvancloud.ir"]
+}
+EOF'
+
+  docker logout >/dev/null 2>&1 || true
+  if ! maybe_sudo systemctl restart docker; then
+    ui_warn "Failed to restart Docker after mirror setup."
+    if [[ -n "${mirror_backup:-}" && -f "${mirror_backup}" ]]; then
+      maybe_sudo cp "${mirror_backup}" /etc/docker/daemon.json
+      maybe_sudo systemctl restart docker 2>/dev/null || true
+    fi
+    return 0
+  fi
+  sleep 2
+  if ! docker info >/dev/null 2>&1; then
+    ui_warn "Docker not running after mirror configuration — restoring previous config."
+    if [[ -n "${mirror_backup:-}" && -f "${mirror_backup}" ]]; then
+      maybe_sudo cp "${mirror_backup}" /etc/docker/daemon.json
+      maybe_sudo systemctl restart docker 2>/dev/null || true
+    fi
+    return 0
+  fi
+  ui_ok "Docker registry mirrors configured."
+}
+
+pull_hodhod_image() {
+  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
+  docker compose pull hodhod-app && docker image inspect "$HODHOD_IMAGE" >/dev/null 2>&1
+}
+
+handle_image_unavailable() {
+  ui_warn "Prebuilt image unavailable or GHCR unreachable: ${HODHOD_IMAGE}"
+  ui_hint "Publish with: git tag v0.1.0 && git push origin v0.1.0"
+  if $NON_INTERACTIVE; then
+    ui_err "Pull failed. Set DEPLOY_MODE=native or ensure the image is pullable."
+    return 1
+  fi
+  echo ""
+  echo "  ${UI_BOLD}What next?${UI_RESET}"
+  echo "    ${UI_CYAN}1)${UI_RESET} Retry pull"
+  echo "    ${UI_CYAN}2)${UI_RESET} Switch to native mode (binary + Postgres container)"
+  echo "    ${UI_CYAN}3)${UI_RESET} Build from source ${UI_DIM}(slow; may fail on restricted networks)${UI_RESET}"
+  local choice
+  while true; do
+    echo -n "  ${UI_BOLD}Choice${UI_RESET} ${UI_DIM}[1]${UI_RESET}: "
+    read -r choice
+    choice="${choice:-1}"
+    case "$choice" in
+      1)
+        ui_hint "Retrying pull..."
+        if pull_hodhod_image; then
+          docker compose up -d hodhod-app
+          return 0
+        fi
+        ui_err "Pull still failed."
+        ;;
+      2)
+        DEPLOY_MODE=native
+        write_env
+        start_native
+        return 0
+        ;;
+      3)
+        ui_warn "Building locally — requires network access to Debian/Alpine package mirrors."
+        DEPLOY_MODE=build
+        write_env
+        docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build hodhod-app
+        return 0
+        ;;
+      *) ui_err "Pick 1, 2, or 3." ;;
+    esac
+  done
+}
+
 wait_health() {
   local target="http://127.0.0.1:${HTTP_PORT}/healthz"
   ui_hint "Waiting for Hodhod at ${target} ..."
@@ -431,17 +558,16 @@ start_docker_app() {
   export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
   if [[ "$DEPLOY_MODE" == "build" ]]; then
     ui_hint "Building image from source (this may take a few minutes)..."
-    docker compose up -d --build hodhod-app
+    ui_warn "Local builds need network access to package registries."
+    docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build hodhod-app
     return
   fi
   ui_hint "Pulling prebuilt image: ${HODHOD_IMAGE}"
-  if docker compose pull hodhod-app 2>/dev/null; then
+  if pull_hodhod_image; then
     docker compose up -d hodhod-app
     return
   fi
-  ui_warn "Prebuilt image not available yet — building from source instead."
-  ui_hint "Publish an image with: git tag v0.1.0 && git push origin v0.1.0"
-  docker compose up -d --build hodhod-app
+  handle_image_unavailable
 }
 
 install_native_binary() {
@@ -586,6 +712,7 @@ do_install() {
   write_env
 
   ui_step 3 4 "Starting services"
+  configure_docker_registry_mirrors
   start_stack
   wait_health || true
 
@@ -628,9 +755,10 @@ do_update() {
     install_native_binary
     maybe_sudo systemctl restart hodhod
   elif [[ "$DEPLOY_MODE" == "build" ]]; then
-    docker compose up -d --build hodhod-app
+    docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build hodhod-app
   else
-    docker compose pull hodhod-app && docker compose up -d hodhod-app
+    pull_hodhod_image || { ui_err "Failed to pull ${HODHOD_IMAGE}"; return 1; }
+    docker compose up -d hodhod-app
   fi
   wait_health || true
   ui_ok "Update complete."
