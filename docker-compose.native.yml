@@ -1,0 +1,5 @@
+# Overlay for native-binary deploy: expose Postgres to localhost only.
+services:
+  hodhod-db:
+    ports:
+      - "127.0.0.1:5432:5432"

@@ -28,12 +28,23 @@ bash install.sh
 
 Choose **Install**. The installer will:
 
-1. Verify Docker, OpenSSL, and curl
-2. Prompt for your public **HTTPS URL** (`https://your.domain`), master credentials, optional SOCKS proxy, and local app port (default `8080`)
-3. Generate secrets and write `.env`
-4. Build and start the Docker stack (`hodhod-app` + PostgreSQL)
-5. Wait for `/healthz`
-6. **Configure host Nginx + Let's Encrypt SSL** (Certbot) — installs `nginx` and `certbot` if needed, writes the site config, obtains a certificate, and enables HTTPS redirect
+1. Verify prerequisites (Docker, OpenSSL, curl)
+2. Let you pick a **deploy mode** (see below)
+3. Prompt for your public URL — enter `your.domain` or `https://your.domain`; the installer normalizes it automatically
+4. Generate secrets and write `.env`
+5. Start services (pull prebuilt image by default — no compile wait)
+6. Wait for `/healthz`
+7. Optionally **configure host Nginx + Let's Encrypt SSL**
+
+### Deploy modes
+
+| Mode | What runs | Speed | When to use |
+|------|-----------|-------|-------------|
+| **Docker (prebuilt)** | App image from GHCR + Postgres container | Fastest | Production default |
+| **Docker (build)** | Builds app image locally + Postgres | Slow | Development / before first release image |
+| **Native binary** | `hodhod` binary via systemd + Postgres container only | Fast | Minimal app container overhead |
+
+**Do you still need Docker?** For modes 1–2, yes (app + DB). For **native** mode, only Postgres runs in Docker — the Go app runs directly on the host. You still need PostgreSQL somewhere; Docker keeps that consistent. A pure non-Docker install (system Postgres + binary) is possible manually but not automated yet.
 
 After install:
 
@@ -45,12 +56,15 @@ After install:
 Non-interactive install (CI / automation):
 
 ```bash
-export PUBLIC_BASE_URL=https://your.domain
+export PUBLIC_BASE_URL=your.domain          # https:// added automatically
 export MASTER_PASSWORD='your-secure-password'
+export DEPLOY_MODE=docker                   # docker | build | native
 export SETUP_NGINX=1
 export CERTBOT_EMAIL=you@example.com
 bash install.sh --non-interactive
 ```
+
+Prebuilt images are published to `ghcr.io/mrchatam/hodhod:latest` on each `v*` tag (see `.github/workflows/release.yml`). Until the first release, the installer falls back to building from source automatically.
 
 Installer menu options: update stack, remove stack, logs, status, regenerate secrets, **reconfigure Nginx + SSL**.
 
