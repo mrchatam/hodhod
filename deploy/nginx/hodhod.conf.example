@@ -1,0 +1,64 @@
+# Hodhod — host Nginx reverse proxy (example)
+# Replace __DOMAIN__ and __HTTP_PORT__ before use, or run: bash install.sh
+#
+# Routes:
+#   /                 Admin GUI
+#   /wh/tg/           Telegram webhooks
+#   /api/miniapp/     Mini App JSON API
+#   /miniapp/         Mini App static assets
+
+upstream hodhod_app {
+    server 127.0.0.1:__HTTP_PORT__;
+    keepalive 8;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    access_log /var/log/nginx/hodhod_access.log;
+    error_log  /var/log/nginx/hodhod_error.log;
+
+    client_max_body_size 20m;
+
+    location /wh/tg/ {
+        proxy_pass http://hodhod_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    location /api/miniapp/ {
+        proxy_pass http://hodhod_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /miniapp/ {
+        proxy_pass http://hodhod_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://hodhod_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# After enabling this site, obtain TLS with certbot (install.sh does this automatically):
+#   certbot --nginx -d __DOMAIN__ --redirect
