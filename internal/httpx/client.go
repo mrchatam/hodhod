@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrchatam/hodhod/internal/debuglog"
 	"golang.org/x/net/proxy"
 )
 
@@ -36,6 +37,18 @@ func New(cfg Config) (*http.Client, error) {
 		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return dialer.Dial(network, addr)
 		}
+		// #region agent log
+		host := proxyHost(cfg.ProxyURL)
+		debuglog.Write("A", "httpx/client.go:New", "outbound client with proxy", map[string]any{
+			"proxyHost": host, "scheme": proxyScheme(cfg.ProxyURL), "timeoutSec": cfg.Timeout.Seconds(),
+		})
+		// #endregion
+	} else {
+		// #region agent log
+		debuglog.Write("A", "httpx/client.go:New", "outbound client direct (no proxy)", map[string]any{
+			"timeoutSec": cfg.Timeout.Seconds(),
+		})
+		// #endregion
 	}
 	return &http.Client{
 		Timeout:   cfg.Timeout,
@@ -63,4 +76,20 @@ func socksDialer(proxyURL string) (proxy.Dialer, error) {
 	}
 	// socks5h resolves DNS through proxy
 	return proxy.SOCKS5("tcp", host, auth, proxy.Direct)
+}
+
+func proxyHost(proxyURL string) string {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
+}
+
+func proxyScheme(proxyURL string) string {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return ""
+	}
+	return u.Scheme
 }

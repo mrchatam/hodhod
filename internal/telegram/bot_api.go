@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
+	"github.com/mrchatam/hodhod/internal/debuglog"
 	"github.com/mrchatam/hodhod/internal/i18n"
 )
 
@@ -29,18 +31,58 @@ func ValidateToken(ctx context.Context, box *crypto.Box, token string, httpClien
 	if !botTokenRE.MatchString(token) {
 		return "", fmt.Errorf("invalid token format — use the token from @BotFather (e.g. 123456789:AAH…)")
 	}
+	// #region agent log
+	reqCtxDeadline, hasReqDeadline := ctx.Deadline()
+	debuglog.Write("C", "telegram/bot_api.go:ValidateToken", "getMe start", map[string]any{
+		"hasReqDeadline": hasReqDeadline,
+		"reqDeadlineMs":  deadlineMs(reqCtxDeadline, hasReqDeadline),
+		"clientTimeoutSec": clientTimeoutSec(httpClient),
+		"usesCustomTransport": httpClient != nil && httpClient.Transport != nil,
+	})
+	start := time.Now()
+	// #endregion
 	api, err := bot.New(token, bot.WithHTTPClient(15, httpClient))
 	if err != nil {
+		// #region agent log
+		debuglog.Write("D", "telegram/bot_api.go:ValidateToken", "bot.New failed", map[string]any{
+			"err": err.Error(), "elapsedMs": time.Since(start).Milliseconds(),
+		})
+		// #endregion
 		return "", FriendlyTokenError(err)
 	}
 	me, err := api.GetMe(ctx)
+	elapsed := time.Since(start).Milliseconds()
 	if err != nil {
+		// #region agent log
+		debuglog.Write("B", "telegram/bot_api.go:ValidateToken", "getMe failed", map[string]any{
+			"err": err.Error(), "elapsedMs": elapsed, "ctxErr": ctx.Err() != nil,
+		})
+		// #endregion
 		return "", FriendlyTokenError(err)
 	}
+	// #region agent log
+	debuglog.Write("B", "telegram/bot_api.go:ValidateToken", "getMe ok", map[string]any{
+		"elapsedMs": elapsed, "hasUsername": me.Username != "",
+	})
+	// #endregion
 	if me.Username == "" {
 		return "", fmt.Errorf("bot has no @username — set one in @BotFather")
 	}
 	return me.Username, nil
+}
+
+func deadlineMs(t time.Time, ok bool) int64 {
+	if !ok {
+		return -1
+	}
+	return time.Until(t).Milliseconds()
+}
+
+func clientTimeoutSec(c *http.Client) float64 {
+	if c == nil {
+		return 0
+	}
+	return c.Timeout.Seconds()
 }
 
 // FriendlyTokenError maps Telegram API errors to user-facing messages.
