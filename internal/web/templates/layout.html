@@ -7,64 +7,21 @@
   <link rel="stylesheet" href="/static/app.css?v={{cssVer}}">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-  <script>
-  (function(){
-    var t=document.documentElement.getAttribute('data-theme');
-    if(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark');
-    else if(t==='system')document.documentElement.classList.remove('dark');
-  })();
-  </script>
+  <script src="/static/app.js?v={{cssVer}}" defer></script>
 </head>
-<body class="min-h-full">
-<div class="min-h-full flex">
+<body class="min-h-dvh flex flex-col">
+<div class="min-h-dvh flex flex-1 min-w-0">
   {{template "sidebar" .}}
   <div class="flex-1 flex flex-col min-w-0">
     {{template "topbar" .}}
-    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
+    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto pb-20 md:pb-6">
       {{template "flash" .}}
       {{template "content" .}}
     </main>
   </div>
 </div>
-<div id="drawer-backdrop" class="drawer-backdrop hidden" aria-hidden="true"></div>
-<script>
-(function(){
-  var toggle=document.getElementById('nav-toggle');
-  var drawer=document.getElementById('mobile-drawer');
-  var backdrop=document.getElementById('drawer-backdrop');
-  function closeDrawer(){drawer&&drawer.classList.remove('open');backdrop&&backdrop.classList.add('hidden');document.body.style.overflow='';}
-  function openDrawer(){drawer&&drawer.classList.add('open');backdrop&&backdrop.classList.remove('hidden');document.body.style.overflow='hidden';}
-  toggle&&toggle.addEventListener('click',function(){drawer&&drawer.classList.contains('open')?closeDrawer():openDrawer();});
-  backdrop&&backdrop.addEventListener('click',closeDrawer);
-  document.querySelectorAll('.modal-backdrop[data-close]').forEach(function(el){el.addEventListener('click',function(e){if(e.target===el)el.classList.add('hidden');});});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeDrawer();document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(function(m){m.classList.add('hidden');});}});
-  document.body.addEventListener('submit',function(e){
-    var form=e.target;if(!(form instanceof HTMLFormElement))return;
-    if(form.dataset.noBusy==='1')return;
-    var btn=form.querySelector('button[type="submit"]');
-    if(!btn||btn.getAttribute('aria-busy')==='true')return;
-    btn.setAttribute('aria-busy','true');
-    var label=btn.querySelector('.btn-label');
-    if(label&&btn.dataset.busyText)label.textContent=btn.dataset.busyText;
-  });
-  document.body.addEventListener('htmx:beforeRequest',function(e){
-    var elt=e.detail.elt;if(!elt)return;
-    var btn=elt.tagName==='BUTTON'?elt:elt.querySelector('button[type="submit"]');
-    if(btn)btn.setAttribute('aria-busy','true');
-  });
-  document.body.addEventListener('htmx:afterRequest',function(e){
-    var elt=e.detail.elt;if(!elt)return;
-    var btn=elt.tagName==='BUTTON'?elt:elt.querySelector('button[type="submit"]');
-    if(btn)btn.removeAttribute('aria-busy');
-  });
-  document.querySelectorAll('[data-action-menu]').forEach(function(wrap){
-    var btn=wrap.querySelector('[data-action-menu-btn]');
-    var panel=wrap.querySelector('[data-action-menu-panel]');
-    if(!btn||!panel)return;
-    btn.addEventListener('click',function(e){e.stopPropagation();panel.classList.toggle('hidden');});
-    document.addEventListener('click',function(){panel.classList.add('hidden');});
-  });
-})();
-</script>
+{{template "mobile_sheet" .}}
+<div id="sheet-backdrop" class="sheet-backdrop hidden" aria-hidden="true"></div>
+{{template "bottom_nav" .}}
 </body>
 </html>{{end}}

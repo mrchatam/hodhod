@@ -37,7 +37,7 @@
     <form method="post" action="/services/{{.Svc.ID}}/delete" onsubmit="return confirm('{{T $.Lang "confirm.delete"}}')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full text-[var(--color-danger)]">{{T $.Lang "common.delete"}}</button></form>
     {{end}}
     <button type="button" class="w-full qr-btn" data-sub="{{.Svc.SubLink}}">{{T $.Lang "services.qr"}}</button>
-    <button type="button" class="w-full" onclick="navigator.clipboard.writeText('{{.Svc.SubLink}}')">{{T $.Lang "common.copy"}}</button>
+    <button type="button" class="w-full" data-copy="{{.Svc.SubLink}}">{{T $.Lang "common.copy"}}</button>
   </div>
 </div>
 {{end}}

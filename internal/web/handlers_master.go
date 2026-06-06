@@ -95,13 +95,19 @@ func (s *Server) pageAgentEdit(w http.ResponseWriter, r *http.Request) {
 	type accessPanelUsers struct {
 		PanelID int64
 		Users   []panels.UserInfo
+		Err     error
 	}
 	var accessUsers []accessPanelUsers
+	var accessListErr error
 	for _, ap := range agentPanels {
 		if client, err := s.Panels.Get(r.Context(), ap.PanelID); err == nil {
-			if users, err := client.ListUsers(r.Context()); err == nil {
-				accessUsers = append(accessUsers, accessPanelUsers{PanelID: ap.PanelID, Users: users})
+			users, err := client.ListUsers(r.Context())
+			accessUsers = append(accessUsers, accessPanelUsers{PanelID: ap.PanelID, Users: users, Err: err})
+			if err != nil && accessListErr == nil {
+				accessListErr = err
 			}
+		} else if accessListErr == nil {
+			accessListErr = err
 		}
 	}
 	type accessInboundRow struct {
@@ -156,7 +162,7 @@ func (s *Server) pageAgentEdit(w http.ResponseWriter, r *http.Request) {
 		"PlatformHost": s.Cfg.MainHost(), "AgentPublicURL": s.AgentPublicURL(r.Context(), agent),
 		"InboundGrants": inboundGrantsByPanel, "UserGrants": userGrantsByPanel,
 		"AccessPanelID": accessPanelID, "AccessInboundRows": accessInboundRows,
-		"AccessUserRows": accessUserRows,
+		"AccessUserRows": accessUserRows, "AccessListErr": accessListErr,
 	})
 }
 
@@ -208,7 +214,7 @@ func (s *Server) postAgentAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.Store.ReplaceAgentInboundGrants(r.Context(), id, panelID, inboundGrants); err != nil {
 		s.saveFlash(w, err, "")
-		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d?access_panel=%d#tab-panels", id, panelID), http.StatusSeeOther)
 		return
 	}
 	var userGrants []db.AgentUserGrant
@@ -251,7 +257,7 @@ func (s *Server) postAgentAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.Store.ReplaceAgentUserGrants(r.Context(), id, panelID, userGrants)
 	s.saveFlash(w, err, "Access saved")
-	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d?access_panel=%d#tab-panels", id, panelID), http.StatusSeeOther)
 }
 
 func permFields(p *db.AgentPermissions) []map[string]any {

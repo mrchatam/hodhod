@@ -29,7 +29,7 @@
 <div id="qr-modal" class="modal-backdrop hidden" data-close role="dialog" aria-modal="true">
   <div class="modal-panel text-center">
     <canvas id="qr-canvas" class="mx-auto"></canvas>
-    <button type="button" class="btn btn-muted mt-4" onclick="document.getElementById('qr-modal').classList.add('hidden')">{{T .Lang "common.close"}}</button>
+    <button type="button" class="btn btn-muted mt-4" data-modal-close="qr-modal">{{T .Lang "common.close"}}</button>
   </div>
 </div>
 
@@ -66,13 +66,4 @@
 </div>
 
 {{template "pagination" .}}
-
-<script>
-document.querySelectorAll('.qr-btn').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    QRCode.toCanvas(document.getElementById('qr-canvas'), btn.dataset.sub, {width: 200});
-    document.getElementById('qr-modal').classList.remove('hidden');
-  });
-});
-</script>
 {{end}}

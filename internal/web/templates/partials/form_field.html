@@ -54,7 +54,7 @@
   <div class="modal-panel">
     <div class="flex items-center justify-between mb-4">
       <h3 id="{{.ID}}-title" class="text-lg font-semibold">{{.Title}}</h3>
-      <button type="button" class="btn btn-muted btn-sm" onclick="document.getElementById('{{.ID}}').classList.add('hidden')">{{T .Lang "common.close"}}</button>
+      <button type="button" class="btn btn-muted btn-sm" data-modal-close="{{.ID}}">{{T .Lang "common.close"}}</button>
     </div>
     {{.Body}}
   </div>

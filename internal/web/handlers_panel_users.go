@@ -52,15 +52,14 @@ func (s *Server) pagePanelUsers(w http.ResponseWriter, r *http.Request) {
 	var panelErr error
 	var rows []PanelUserRow
 	stats := panelUserStats{}
+	var apiPage *panels.UserListPage
 	if err != nil {
 		panelErr = err
 	} else {
-		usernames := make([]string, len(page.Users))
-		for i, u := range page.Users {
-			usernames[i] = u.Username
-		}
-		services, _ := s.Store.ListServicesForPanelUsernames(r.Context(), panelID, usernames)
-		rows, stats = mergePanelUsersPage(page.Users, services, agents, inbounds, f)
+		apiPage = page
+		allServices, _ := s.Store.ListServicesForPanel(r.Context(), panelID)
+		rows, stats = mergePanelUsersPage(page.Users, allServices, agents, inbounds, f, pag.Page)
+		rows = enrichPanelUserOnline(r.Context(), client, rows)
 		if f.Source == "both" {
 			filtered := rows[:0]
 			for _, row := range rows {
@@ -88,6 +87,8 @@ func (s *Server) pagePanelUsers(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, inbounds, rows, panelErr, map[string]any{
 		"Stats": stats, "Filters": f, "Templates": templates, "Agents": allAgents,
 		"PanelListErr": panelErr, "Pagination": pag,
+		"PanelEmptyHint": panelErr == nil && len(rows) == 0 && apiPage != nil && apiPage.Total == 0,
+		"CanDelDepleted": panel.Type == db.PanelXUI,
 	}))
 }
 
@@ -463,5 +464,29 @@ func (s *Server) postPanelUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setFlash(w, "ok", "User deleted")
+	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+}
+
+func (s *Server) postPanelUsersDelDepleted(w http.ResponseWriter, r *http.Request) {
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	client, err := s.Panels.Get(r.Context(), panelID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	cleaner, ok := client.(panels.DepletedCleaner)
+	if !ok {
+		http.Error(w, "not supported", http.StatusBadRequest)
+		return
+	}
+	n, err := cleaner.DeleteDepletedClients(r.Context())
+	if err != nil {
+		s.setFlash(w, "err", err.Error())
+		http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+		return
+	}
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	s.audit(r, &admin.ID, "del_depleted_clients", "panel", panelID, map[string]any{"deleted": n})
+	s.setFlash(w, "ok", fmt.Sprintf("Removed %d depleted clients", n))
 	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
 }

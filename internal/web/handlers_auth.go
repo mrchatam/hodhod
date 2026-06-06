@@ -88,6 +88,7 @@ func (s *Server) pageDashboard(w http.ResponseWriter, r *http.Request) {
 			stats = append(stats, stat{Name: a.Name, Services: svc, Revenue: rev})
 		}
 		extra["AgentStats"] = stats
+		extra["PanelHealth"] = s.panelHealthRows(r.Context())
 	} else if admin.AgentID != nil {
 		n, _ := s.Store.CountServicesByAgent(r.Context(), *admin.AgentID)
 		extra["MyServices"] = n
@@ -96,7 +97,12 @@ func (s *Server) pageDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) pageOnboarding(w http.ResponseWriter, r *http.Request) {
-	s.renderPage(w, "onboarding", r, nil)
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	page := "onboarding_agent"
+	if admin.Role == db.RoleMaster {
+		page = "onboarding_master"
+	}
+	s.renderPage(w, page, r, nil)
 }
 
 func (s *Server) approvePayment(w http.ResponseWriter, r *http.Request) {

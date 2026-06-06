@@ -27,6 +27,8 @@ type PanelUserRow struct {
 	CanModify      bool
 	SubLink        string
 	PanelID        int64
+	Online         bool
+	LastOnline     time.Time
 }
 
 type panelUserFilters struct {
@@ -104,17 +106,22 @@ func mergePanelUsers(panelUsers []panels.UserInfo, services []db.Service, agents
 }
 
 // mergePanelUsersPage merges one page of panel users with Hodhod services.
-func mergePanelUsersPage(panelUsers []panels.UserInfo, services []db.Service, agents map[int64]string, inbounds []panels.InboundInfo, f panelUserFilters) ([]PanelUserRow, panelUserStats) {
+// allServices is every Hodhod service on the panel; hodhod-only rows (not on this API page) append on page 1 when source filter is empty.
+func mergePanelUsersPage(panelUsers []panels.UserInfo, allServices []db.Service, agents map[int64]string, inbounds []panels.InboundInfo, f panelUserFilters, pageNum int) ([]PanelUserRow, panelUserStats) {
 	inboundTags := map[int]string{}
 	for _, inb := range inbounds {
 		inboundTags[inb.ID] = inb.Tag
 	}
 	svcByUser := map[string]db.Service{}
-	for _, svc := range services {
+	for _, svc := range allServices {
 		if f.AgentID > 0 && svc.AgentID != f.AgentID {
 			continue
 		}
 		svcByUser[svc.PanelUsername] = svc
+	}
+	onPage := map[string]bool{}
+	for _, u := range panelUsers {
+		onPage[u.Username] = true
 	}
 	var rows []PanelUserRow
 	stats := panelUserStats{PanelCount: len(panelUsers), HodhodCount: len(svcByUser)}
@@ -129,6 +136,20 @@ func mergePanelUsersPage(panelUsers []panels.UserInfo, services []db.Service, ag
 		if matchPanelUserFilters(row, f) {
 			rows = append(rows, row)
 			stats.Shown++
+		}
+	}
+	if f.Source == "" && pageNum <= 1 {
+		for username, svc := range svcByUser {
+			if onPage[username] {
+				continue
+			}
+			row := panelUserRowFromService(svc, agents)
+			row.Source = "hodhod"
+			row.HodhodOnly = true
+			if matchPanelUserFilters(row, f) {
+				rows = append(rows, row)
+				stats.Shown++
+			}
 		}
 	}
 	return rows, stats

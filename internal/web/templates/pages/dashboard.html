@@ -27,10 +27,37 @@
   </div>
   {{end}}
 </div>
-{{if .IsMaster}}{{range .AgentStats}}
+
+{{if .IsMaster}}
+{{if .PanelHealth}}
+<h3 class="text-lg font-semibold mb-3">{{T .Lang "dashboard.panel_health"}}</h3>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+  {{range .PanelHealth}}
+  <div class="card p-4 text-sm">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <a href="/master/panels/{{.PanelID}}" class="font-medium text-brand-600 hover:underline">{{.Name}}</a>
+      {{if .Reachable}}<span class="badge badge-active">{{T $.Lang "dashboard.online"}}</span>{{else}}<span class="badge badge-disabled">{{T $.Lang "dashboard.offline"}}</span>{{end}}
+    </div>
+    {{if .Err}}
+    <p class="text-xs opacity-60">{{.Err}}</p>
+    {{else}}
+    <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs opacity-80">
+      <dt>{{T $.Lang "dashboard.cpu"}}</dt><dd>{{printf "%.0f" .CPUPct}}%</dd>
+      <dt>{{T $.Lang "dashboard.memory"}}</dt><dd>{{printf "%.0f" .MemPct}}%</dd>
+      <dt>Xray</dt><dd>{{if .XrayState}}{{.XrayState}}{{else}}—{{end}}</dd>
+      <dt>{{T $.Lang "dashboard.clients_online"}}</dt><dd>{{.Online}}</dd>
+    </dl>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
+
+{{range .AgentStats}}
 <div class="card p-4 mb-2 flex flex-col sm:flex-row sm:justify-between gap-1 text-sm">
   <span class="font-medium">{{.Name}}</span>
   <span class="opacity-60">{{printf (T $.Lang "dashboard.agent_stats") .Services (toman .Revenue)}}</span>
 </div>
-{{end}}{{end}}
+{{end}}
+{{end}}
 {{end}}

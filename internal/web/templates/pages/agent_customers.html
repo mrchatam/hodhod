@@ -37,7 +37,7 @@
 
 <div class="space-y-2">
   {{range .Rows}}
-  <div class="card p-4 cursor-pointer hover:border-brand-500/40" onclick="location.href='/agent/panels/{{.PanelID}}/customers'">
+  <div class="card p-4 cursor-pointer hover:border-brand-500/40" data-href="/agent/panels/{{.PanelID}}/customers">
     <div class="flex items-center justify-between gap-2">
       <div>
         <p class="font-mono text-sm">{{.Username}}</p>

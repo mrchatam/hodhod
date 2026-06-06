@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "onboarding.agent.title"}}</h2>
+</div>
+
+<ol class="space-y-4 max-w-xl">
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">1</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.agent.step1"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.agent.step1_desc"}}</p>
+      <a href="/agent/panels" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.agent.go_panels"}} →</a>
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">2</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.agent.step2"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.agent.step2_desc"}}</p>
+      {{if .Perms.ManageBot}}<a href="/agent/bots" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_bots"}} →</a>{{end}}
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">3</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.agent.step3"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.agent.step3_desc"}}</p>
+      {{if .Perms.ManagePlans}}<a href="/agent/plans" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.agent.go_plans"}} →</a>{{end}}
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">4</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.agent.step4"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.agent.step4_desc"}}</p>
+      <a href="/customers" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.agent.go_customers"}} →</a>
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">5</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.agent.step5"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.agent.step5_desc"}}</p>
+      <a href="/payments/pending" class="btn btn-link btn-sm mt-2">{{T .Lang "nav.payments"}} →</a>
+    </div>
+  </li>
+</ol>
+{{end}}

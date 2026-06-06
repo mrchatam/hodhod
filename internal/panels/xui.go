@@ -731,3 +731,94 @@ func (c *xuiClient) doRawLocked(ctx context.Context, method, path string, body i
 	}
 	return data, nil
 }
+
+func (c *xuiClient) ListOnlineUsernames(ctx context.Context) (map[string]bool, error) {
+	var obj []string
+	if err := c.do(ctx, http.MethodPost, "/panel/api/clients/onlines", nil, &obj); err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(obj))
+	for _, email := range obj {
+		out[email] = true
+	}
+	return out, nil
+}
+
+func (c *xuiClient) ListLastOnline(ctx context.Context) (map[string]time.Time, error) {
+	var obj map[string]float64
+	if err := c.do(ctx, http.MethodPost, "/panel/api/clients/lastOnline", nil, &obj); err != nil {
+		return nil, err
+	}
+	out := make(map[string]time.Time, len(obj))
+	for email, ts := range obj {
+		if ts > 0 {
+			out[email] = time.Unix(int64(ts), 0)
+		}
+	}
+	return out, nil
+}
+
+func (c *xuiClient) ServerStatus(ctx context.Context) (*ServerStatusInfo, error) {
+	var obj map[string]any
+	if err := c.do(ctx, http.MethodGet, "/panel/api/server/status", nil, &obj); err != nil {
+		return &ServerStatusInfo{Reachable: false, Err: err.Error()}, nil
+	}
+	info := &ServerStatusInfo{Reachable: true}
+	if v, ok := obj["cpu"].(float64); ok {
+		info.CPUPct = v
+	}
+	if mem, ok := obj["mem"].(map[string]any); ok {
+		if v, ok := mem["current"].(float64); ok {
+			info.MemUsed = int64(v)
+		}
+		if v, ok := mem["total"].(float64); ok {
+			info.MemTotal = int64(v)
+		}
+	}
+	if disk, ok := obj["disk"].(map[string]any); ok {
+		if v, ok := disk["current"].(float64); ok {
+			info.DiskUsed = int64(v)
+		}
+		if v, ok := disk["total"].(float64); ok {
+			info.DiskTotal = int64(v)
+		}
+	}
+	if net, ok := obj["netIO"].(map[string]any); ok {
+		if v, ok := net["up"].(float64); ok {
+			info.NetUp = int64(v)
+		}
+		if v, ok := net["down"].(float64); ok {
+			info.NetDown = int64(v)
+		}
+	}
+	if xray, ok := obj["xray"].(map[string]any); ok {
+		if v, ok := xray["state"].(string); ok {
+			info.XrayState = v
+		}
+		if v, ok := xray["version"].(string); ok {
+			info.XrayVer = v
+		}
+	}
+	if v, ok := obj["tcpCount"].(float64); ok {
+		info.TCPCount = int(v)
+	}
+	if load, ok := obj["load"].(map[string]any); ok {
+		if v, ok := load["load1"].(float64); ok {
+			info.Load1 = v
+		}
+	}
+	if v, ok := obj["online"].(float64); ok {
+		info.Online = int(v)
+	}
+	return info, nil
+}
+
+func (c *xuiClient) DeleteDepletedClients(ctx context.Context) (int, error) {
+	var obj struct {
+		Deleted int `json:"deleted"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/panel/api/clients/delDepleted", nil, &obj); err != nil {
+		return 0, err
+	}
+	return obj.Deleted, nil
+}

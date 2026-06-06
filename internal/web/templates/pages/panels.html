@@ -81,17 +81,4 @@
     <button type="submit" class="btn btn-primary" data-busy-text="{{T .Lang "common.loading"}}"><span class="spinner"></span><span class="btn-label">{{T .Lang "panels.add"}}</span></button>
   </form>
 </div>
-<script>
-(function() {
-  var sel = document.getElementById('panel-type');
-  var hint = document.getElementById('hint-base-url');
-  function sync() {
-    var xui = sel && sel.value === 'xui';
-    document.querySelectorAll('.xui-field').forEach(function(el) {
-      el.style.display = xui ? '' : 'none';
-    });
-  }
-  if (sel) { sel.addEventListener('change', sync); sync(); }
-})();
-</script>
 {{end}}

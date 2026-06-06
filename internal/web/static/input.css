@@ -203,6 +203,12 @@
     border: 1px solid var(--color-danger);
     @apply rounded-lg px-3 py-2 text-sm;
   }
+  .alert-warn {
+    background: var(--color-warning-bg, #fef3c7);
+    color: var(--color-warning, #92400e);
+    border: 1px solid var(--color-warning, #f59e0b);
+    @apply rounded-lg px-3 py-2 text-sm;
+  }
   .alert-info {
     background: var(--color-info-bg);
     color: var(--color-info);
@@ -249,10 +255,18 @@
   }
 
   .mobile-card {
-    @apply card p-4 space-y-3 md:hidden;
+    @apply card p-4 space-y-3;
   }
   .desktop-table {
-    @apply hidden md:block;
+    display: none;
+  }
+  @media (min-width: 768px) {
+    .mobile-card {
+      display: none;
+    }
+    .desktop-table {
+      display: block;
+    }
   }
 
   .inbound-grid {
@@ -282,21 +296,58 @@
     background: var(--color-surface-2);
   }
 
-  .drawer-backdrop {
-    @apply fixed inset-0 z-40 bg-black/50 md:hidden;
+  .sheet-backdrop {
+    @apply fixed inset-0 z-40 bg-black/50;
   }
-  .drawer-panel {
-    @apply fixed top-0 z-50 flex h-full w-72 max-w-[85vw] flex-col shadow-xl transition-transform duration-200 md:hidden;
+  .sheet-backdrop.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  @media (min-width: 768px) {
+    .sheet-backdrop {
+      display: none;
+    }
+  }
+  .sheet-panel {
+    @apply fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] w-full flex-col rounded-t-2xl shadow-xl transition-transform duration-200;
     background: var(--color-surface);
-    border-inline-end: 1px solid var(--color-border);
-    inset-inline-start: 0;
-    transform: translateX(-100%);
+    border-top: 1px solid var(--color-border);
+    transform: translateY(100%);
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
-  [dir='rtl'] .drawer-panel {
-    transform: translateX(100%);
+  .sheet-panel.open {
+    transform: translateY(0);
   }
-  .drawer-panel.open {
-    transform: translateX(0);
+  .sheet-panel:not(.open) {
+    @apply pointer-events-none;
+  }
+  .sheet-handle {
+    @apply mx-auto mt-2 h-1 w-10 shrink-0 rounded-full opacity-40;
+    background: var(--color-muted);
+  }
+
+  .bottom-nav {
+    @apply fixed inset-x-0 bottom-0 z-30 flex items-stretch justify-around border-t;
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  @media (min-width: 768px) {
+    .sheet-panel,
+    .bottom-nav {
+      display: none;
+    }
+  }
+  .bottom-nav-item {
+    @apply flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors;
+    color: var(--color-muted);
+    min-height: 3.5rem;
+  }
+  .bottom-nav-item.bottom-nav-active {
+    color: var(--color-brand);
+  }
+  .bottom-nav-icon {
+    @apply h-5 w-5;
   }
 
   .modal-backdrop {

@@ -1,5 +1,5 @@
 {{define "agent_customer_row"}}
-<tr id="pu-row-{{.Row.Username}}" class="cursor-pointer" onclick="document.getElementById('drawer-{{.Row.Username}}').classList.toggle('hidden')">
+<tr id="pu-row-{{.Row.Username}}" class="cursor-pointer" data-row-toggle="drawer-{{.Row.Username}}">
   <td><p class="font-mono text-xs">{{.Row.Username}}</p>{{if .Row.Label}}<p class="text-xs opacity-60">{{.Row.Label}}</p>{{end}}</td>
   <td>
     <div class="usage-bar"><div class="usage-bar-fill" style="width:{{usagePct .Row.UsedBytes .Row.DataLimitBytes}}%"></div></div>
@@ -7,8 +7,8 @@
   </td>
   <td>{{time .Row.ExpireAt}}</td>
   <td>{{template "panel_user_status_badge" .Row}}</td>
-  <td class="text-end" onclick="event.stopPropagation()">
-    {{if .Row.SubLink}}<button type="button" class="btn btn-muted btn-sm" onclick="navigator.clipboard.writeText('{{.Row.SubLink}}')">{{T .Lang "users.copy_sub"}}</button>{{end}}
+  <td class="text-end" data-stop-toggle>
+    {{if .Row.SubLink}}<button type="button" class="btn btn-muted btn-sm" data-copy="{{.Row.SubLink}}">{{T .Lang "users.copy_sub"}}</button>{{end}}
     {{if .Row.CanModify}}{{template "agent_customer_actions" .}}{{end}}
   </td>
 </tr>

@@ -5,7 +5,7 @@
     <h2 class="text-2xl font-bold">{{.Panel.Name}}</h2>
   </div>
   {{if .CanCreate}}
-  <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('create-modal').classList.remove('hidden')">{{T .Lang "customers.create"}}</button>
+  <button type="button" class="btn btn-primary btn-sm" data-modal-open="create-modal">{{T .Lang "customers.create"}}</button>
   {{end}}
 </div>
 
@@ -64,7 +64,7 @@
         <label class="form-field"><span class="form-label">{{T .Lang "panel_users.duration"}}</span><input name="duration_days" type="number" value="30" class="form-input"></label>
       </div>
       <div class="flex gap-2 justify-end">
-        <button type="button" class="btn btn-muted btn-sm" onclick="document.getElementById('create-modal').classList.add('hidden')">{{T .Lang "common.cancel"}}</button>
+        <button type="button" class="btn btn-muted btn-sm" data-modal-close="create-modal">{{T .Lang "common.cancel"}}</button>
         <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.create"}}</button>
       </div>
     </form>

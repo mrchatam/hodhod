@@ -99,10 +99,13 @@
   </form>
   <ul class="space-y-2">{{range .AgentPanels}}<li class="card p-3 text-sm flex justify-between items-center">
     <span>{{T $.Lang "table.panel"}} {{.PanelID}} · {{T $.Lang "agent_edit.max_users"}} {{.MaxUsers}} · {{.ExpiryCapDays}}d</span>
-    <a href="/master/agents/{{$.Agent.ID}}?access_panel={{.PanelID}}#tab-panels" class="btn btn-secondary btn-sm" onclick="document.querySelector('[data-tab=panels]').click()">{{T $.Lang "access.select_panel"}}</a>
+    <a href="/master/agents/{{$.Agent.ID}}?access_panel={{.PanelID}}#tab-panels" class="btn btn-secondary btn-sm">{{T $.Lang "access.select_panel"}}</a>
   </li>{{end}}</ul>
 
   {{if .AccessPanelID}}
+  {{if .AccessListErr}}
+  <div class="alert-err text-sm p-3 rounded-lg">{{T .Lang "panel_users.list_err"}}: {{.AccessListErr.Error}}</div>
+  {{end}}
   <form method="post" action="/master/agents/{{.Agent.ID}}/access" class="card p-6 space-y-6">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <input type="hidden" name="panel_id" value="{{.AccessPanelID}}">
@@ -168,18 +171,4 @@
     {{end}}
   </div>
 </section>
-
-<script>
-(function(){
-  var tabs=document.querySelectorAll('[data-tab]');
-  var panels=document.querySelectorAll('.tab-panel');
-  tabs.forEach(function(tab){
-    tab.addEventListener('click',function(){
-      var id=tab.getAttribute('data-tab');
-      tabs.forEach(function(t){t.classList.toggle('tab-active',t===tab);});
-      panels.forEach(function(p){p.classList.toggle('hidden',p.id!=='tab-'+id);});
-    });
-  });
-})();
-</script>
 {{end}}

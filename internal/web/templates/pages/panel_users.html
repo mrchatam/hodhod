@@ -22,9 +22,19 @@
     </p>
     {{if .PanelListErr}}
     <div class="alert-err mt-3">{{T .Lang "panel_users.list_err"}}: {{.PanelListErr.Error}} — {{T .Lang "panel_users.list_err_hint"}}</div>
+    {{else if .PanelEmptyHint}}
+    <div class="alert-warn mt-3">{{T .Lang "panel_users.empty_panel_hint"}}</div>
     {{end}}
   </div>
-  <button type="button" class="btn btn-primary btn-sm shrink-0" onclick="document.getElementById('master-create-modal').classList.remove('hidden')">{{T .Lang "users.create_modal"}}</button>
+  <div class="flex flex-wrap gap-2 shrink-0">
+    {{if .CanDelDepleted}}
+    <form method="post" action="/master/panels/{{.Panel.ID}}/users/del-depleted" data-confirm="{{T .Lang "panel_users.del_depleted_confirm"}}">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <button type="submit" class="btn btn-danger btn-sm">{{T .Lang "panel_users.del_depleted"}}</button>
+    </form>
+    {{end}}
+    <button type="button" class="btn btn-primary btn-sm" data-modal-open="master-create-modal">{{T .Lang "users.create_modal"}}</button>
+  </div>
 </div>
 
 <form method="get" action="/master/panels/{{.Panel.ID}}/users" class="card p-4 mb-4 space-y-3 sticky top-0 z-10">
@@ -165,39 +175,10 @@
       </div>
       <label class="form-field"><span class="form-label">{{T .Lang "panel_users.note"}}</span><input name="note" id="create-note" class="form-input"></label>
       <div class="flex gap-2 justify-end">
-        <button type="button" class="btn btn-muted btn-sm" onclick="document.getElementById('master-create-modal').classList.add('hidden')">{{T .Lang "common.cancel"}}</button>
+        <button type="button" class="btn btn-muted btn-sm" data-modal-close="master-create-modal">{{T .Lang "common.cancel"}}</button>
         <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.create"}}</button>
       </div>
     </form>
   </div>
 </div>
-
-<script>
-function applyTemplate(btn) {
-  document.getElementById('create-volume').value = btn.dataset.volume || 30;
-  document.getElementById('create-days').value = btn.dataset.days || 30;
-  document.getElementById('create-ip').value = btn.dataset.ip || 0;
-  document.getElementById('create-note').value = btn.dataset.note || '';
-  var ids = (btn.dataset.inbounds || '').split(',').filter(Boolean);
-  document.querySelectorAll('.inbound-cb').forEach(function(cb) {
-    cb.checked = ids.indexOf(cb.value) !== -1;
-  });
-}
-document.querySelectorAll('.template-pick').forEach(function(btn) {
-  btn.addEventListener('click', function() { applyTemplate(btn); });
-});
-function syncTemplateForm() {
-  document.getElementById('tpl-volume').value = document.getElementById('create-volume').value;
-  document.getElementById('tpl-days').value = document.getElementById('create-days').value;
-  document.getElementById('tpl-ip').value = document.getElementById('create-ip').value;
-  document.getElementById('tpl-note').value = document.getElementById('create-note').value;
-  var box = document.getElementById('tpl-inbound-hidden');
-  box.innerHTML = '';
-  document.querySelectorAll('.inbound-cb:checked').forEach(function(cb) {
-    var inp = document.createElement('input');
-    inp.type = 'hidden'; inp.name = 'inbound_ids'; inp.value = cb.value;
-    box.appendChild(inp);
-  });
-}
-</script>
 {{end}}

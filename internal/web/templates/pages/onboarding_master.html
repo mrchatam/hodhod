@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "onboarding.title"}}</h2>
+</div>
+
+<ol class="space-y-4 max-w-xl">
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">1</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step1"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step1_desc"}}</p>
+      <a href="/master/panels" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_panels"}} →</a>
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">2</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step2_title"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step2_desc"}}</p>
+      <a href="/master/agents" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_agents"}} →</a>
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">3</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step3_title"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step3_desc"}}</p>
+      <a href="/master/bots" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_bots"}} →</a>
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">4</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step4_title"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step4_desc"}}</p>
+      <a href="/services" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_services"}} →</a>
+    </div>
+  </li>
+</ol>
+{{end}}

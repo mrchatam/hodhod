@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mrchatam/hodhod/internal/db"
@@ -16,7 +17,7 @@ import (
 var templateFS embed.FS
 
 var pageNames = []string{
-	"dashboard", "payments", "services", "service_create", "onboarding",
+	"dashboard", "payments", "services", "service_create", "onboarding", "onboarding_master", "onboarding_agent",
 	"agents", "agent_edit", "agent_panels", "agent_customers", "agent_panel_customers", "customer_create", "panels", "panel_edit", "panel_users", "panel_backups", "bots", "bot_settings",
 	"agent_bots", "agent_plans", "agent_bot_settings",
 }
@@ -39,6 +40,9 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		"sub":         func(a, b int) int { return a - b },
 		"seq":         seqPages,
 		"cssVer":      CSSAssetVersion,
+		"hasPrefix": func(s, prefix string) bool {
+			return strings.HasPrefix(s, prefix)
+		},
 	}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {

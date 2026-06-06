@@ -9,18 +9,22 @@ import (
 	"strings"
 )
 
-//go:embed static/app.css
+//go:embed static/app.css static/app.js
 var staticFS embed.FS
 
-// cssAssetVersion busts browser cache after CSS rebuilds (hash prefix of embedded app.css).
+// cssAssetVersion busts browser cache after static asset rebuilds.
 var cssAssetVersion string
 
 func init() {
-	b, err := staticFS.ReadFile("static/app.css")
-	if err != nil || len(b) == 0 {
-		return
+	h := sha256.New()
+	for _, name := range []string{"static/app.css", "static/app.js"} {
+		b, err := staticFS.ReadFile(name)
+		if err != nil || len(b) == 0 {
+			continue
+		}
+		h.Write(b)
 	}
-	sum := sha256.Sum256(b)
+	sum := h.Sum(nil)
 	cssAssetVersion = hex.EncodeToString(sum[:6])
 }
 
@@ -35,8 +39,12 @@ func (s *Server) staticHandler() http.Handler {
 }
 
 func staticContentType(path string) string {
-	if strings.HasSuffix(path, ".css") {
+	switch {
+	case strings.HasSuffix(path, ".css"):
 		return "text/css; charset=utf-8"
+	case strings.HasSuffix(path, ".js"):
+		return "application/javascript; charset=utf-8"
+	default:
+		return "application/octet-stream"
 	}
-	return "application/octet-stream"
 }

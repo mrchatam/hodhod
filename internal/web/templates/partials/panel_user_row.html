@@ -39,6 +39,7 @@
   <div class="flex items-start justify-between gap-2">
     <div class="min-w-0">
       <p class="font-mono text-xs">{{.Row.Username}}</p>
+      {{if .Row.Online}}<span class="badge badge-active text-[10px]">{{T $.Lang "panel_users.online"}}</span>{{end}}
       {{if .Row.Label}}<p class="text-xs opacity-60 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
       {{if .Row.HodhodOnly}}<p class="text-xs text-amber-700 mt-0.5">{{T $.Lang "panel_users.not_on_panel"}}</p>{{end}}
     </div>
@@ -61,6 +62,7 @@
 <tr id="pu-row-{{.Row.Username}}" class="{{if .Row.HodhodOnly}}bg-amber-50/40 dark:bg-amber-950/20{{end}}">
   <td>
     <p class="font-mono text-xs">{{.Row.Username}}</p>
+    {{if .Row.Online}}<span class="badge badge-active text-[10px] mt-0.5">{{T $.Lang "panel_users.online"}}</span>{{end}}
     {{if .Row.Label}}<p class="text-xs opacity-60 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
     {{if .Row.HodhodOnly}}<p class="text-xs text-amber-700 mt-0.5">{{T $.Lang "panel_users.not_on_panel"}}</p>{{end}}
   </td>
@@ -82,6 +84,7 @@
   <div class="flex items-start justify-between gap-2">
     <div class="min-w-0">
       <p class="font-mono text-xs">{{.Row.Username}}</p>
+      {{if .Row.Online}}<span class="badge badge-active text-[10px]">{{T $.Lang "panel_users.online"}}</span>{{end}}
       {{if .Row.Label}}<p class="text-xs opacity-60 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
       {{if .Row.HodhodOnly}}<p class="text-xs text-amber-700 mt-0.5">{{T $.Lang "panel_users.not_on_panel"}}</p>{{end}}
     </div>
