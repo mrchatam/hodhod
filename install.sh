@@ -44,6 +44,7 @@ Non-interactive env vars:
   HODHOD_USE_DOCKER_MIRROR  1 to enable Arvan docker.io mirror
   HODHOD_SKIP_DOCKER_MIRROR 1 to skip mirror prompt
   HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default 0; use 1 if UI looks stale)
+  HODHOD_FORCE_PREBUILT 1 to pull GHCR image even on a git checkout (default: build from source)
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -240,6 +241,17 @@ load_env() {
     HTTP_PORT="${HTTP_ADDR#:}"
     HTTP_PORT="${HTTP_PORT:-8080}"
     DEPLOY_MODE="${DEPLOY_MODE:-docker}"
+  fi
+}
+
+# Git checkouts should build locally; GHCR :latest may be stale if CI failed.
+prefer_build_mode_for_git_checkout() {
+  if [[ "${HODHOD_FORCE_PREBUILT:-0}" == "1" ]]; then
+    return 0
+  fi
+  if [[ -d "$ROOT/.git" && -f "$ROOT/Dockerfile" && "$DEPLOY_MODE" == "docker" ]]; then
+    ui_warn "Git checkout detected — building from source (set HODHOD_FORCE_PREBUILT=1 to use ${HODHOD_IMAGE:-$HODHOD_IMAGE_DEFAULT} instead)."
+    DEPLOY_MODE=build
   fi
 }
 
@@ -855,6 +867,7 @@ do_update() {
     fi
   fi
 
+  prefer_build_mode_for_git_checkout
   if [[ "$DEPLOY_MODE" == "native" ]]; then
     compose_up_db
     install_native_binary 1

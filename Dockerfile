@@ -1,11 +1,12 @@
 FROM golang:1.22-bookworm AS build
 WORKDIR /src
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* tailwind.config.js ./
 RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && rm -rf /var/lib/apt/lists/*
-RUN npm install && npm run build:css
+RUN npm install
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+RUN npm run build:css
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /hodhod ./cmd/server
 
 FROM gcr.io/distroless/static-debian12:nonroot

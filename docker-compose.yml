@@ -16,7 +16,7 @@ services:
 
   hodhod-app:
     image: ${HODHOD_IMAGE:-ghcr.io/mrchatam/hodhod:latest}
-    pull_policy: missing
+    pull_policy: always
     depends_on:
       hodhod-db:
         condition: service_healthy
