@@ -1,11 +1,7 @@
-# Overlay when Docker bridge egress is broken (host curl works, container TCP times out).
-# Set HODHOD_HOST_NETWORK=1 in .env — app uses the host network stack; Postgres on 127.0.0.1:5432.
+# App uses host network (same egress as host curl). Postgres stays on the Docker bridge.
+# Connect via 127.0.0.1:${HODHOD_DB_HOST_PORT} — see docker-compose.db-localhost.yml.
 services:
-  hodhod-db:
-    ports:
-      - "127.0.0.1:5432:5432"
-
   hodhod-app:
     network_mode: host
     environment:
-      DATABASE_DSN: postgres://hodhod:${DB_PASSWORD:-hodhod}@127.0.0.1:5432/hodhod?sslmode=disable
+      DATABASE_DSN: postgres://hodhod:${DB_PASSWORD:-hodhod}@127.0.0.1:${HODHOD_DB_HOST_PORT:-15432}/hodhod?sslmode=disable

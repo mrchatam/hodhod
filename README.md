@@ -173,14 +173,23 @@ Docker Compose maps `host.docker.internal` to the host gateway so a local SOCKS 
 If `curl https://api.telegram.org/...` works on the host but adding a bot times out inside Docker, bridge egress is broken (common with UFW or VPN + Docker). Fix options:
 
 ```env
-# .env — app uses host networking (Postgres on 127.0.0.1:5432)
+# .env — app uses host networking; Postgres published on localhost (default port 15432)
 HODHOD_HOST_NETWORK=1
+HODHOD_DB_HOST_PORT=15432
+```
+
+If port 5432 is already used by **this** Hodhod Postgres container (e.g. native mode), skip republishing the db:
+
+```env
+HODHOD_HOST_NETWORK=1
+HODHOD_DB_HOST_PORT=5432
+HODHOD_DB_ALREADY_LOCAL=1
 ```
 
 Then `bash install.sh` → Update, or:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.host-network.yml up -d --force-recreate
+docker compose -f docker-compose.yml -f docker-compose.db-localhost.yml -f docker-compose.host-network.yml up -d --force-recreate
 ```
 
 Alternatively use `DEPLOY_MODE=native` (binary on host + Postgres in Docker only).

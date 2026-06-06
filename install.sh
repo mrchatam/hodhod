@@ -46,6 +46,8 @@ Non-interactive env vars:
   HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default 0; build mode only)
   HODHOD_BUILD_LOCAL    1 to build on server (default: pull prebuilt image from GHCR)
   HODHOD_HOST_NETWORK   1 when host curl works but container egress to the internet fails
+  HODHOD_DB_HOST_PORT   localhost Postgres port for host-network app (default 15432)
+  HODHOD_DB_ALREADY_LOCAL 1 if Postgres is already on 127.0.0.1 (skip db port publish)
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -457,7 +459,9 @@ MASTER_USERNAME=${MASTER_USERNAME}
 MASTER_PASSWORD=${MASTER_PASSWORD}
 PANEL_POLL_WORKERS=4
 HODHOD_IMAGE=${HODHOD_IMAGE}
-HODHOD_HOST_NETWORK=${HODHOD_HOST_NETWORK:-0}
+  HODHOD_HOST_NETWORK=${HODHOD_HOST_NETWORK:-0}
+HODHOD_DB_HOST_PORT=${HODHOD_DB_HOST_PORT:-15432}
+HODHOD_DB_ALREADY_LOCAL=${HODHOD_DB_ALREADY_LOCAL:-0}
 EOF
   chmod 600 "$ENV_FILE"
 }
@@ -611,14 +615,40 @@ wait_health() {
 }
 
 compose_up_db() {
-  export DB_PASSWORD HTTP_PORT
+  export DB_PASSWORD HTTP_PORT HODHOD_DB_HOST_PORT
   local db_files=(-f docker-compose.yml)
   if [[ "$DEPLOY_MODE" == "native" ]]; then
     db_files+=(-f docker-compose.native.yml)
-  elif [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]]; then
-    db_files+=(-f docker-compose.host-network.yml)
+  elif [[ "${HODHOD_HOST_NETWORK:-0}" == "1" && "${HODHOD_DB_ALREADY_LOCAL:-0}" != "1" ]]; then
+    db_files+=(-f docker-compose.db-localhost.yml)
   fi
   docker compose "${db_files[@]}" up -d hodhod-db
+}
+
+# When host-network app is enabled, Postgres must be reachable on 127.0.0.1 (not hodhod-db hostname).
+compose_prepare_host_network() {
+  [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]] || return 0
+  export HODHOD_DB_HOST_PORT="${HODHOD_DB_HOST_PORT:-15432}"
+  if [[ "${HODHOD_DB_ALREADY_LOCAL:-0}" == "1" ]]; then
+    ui_hint "Host-network mode: using Postgres already on 127.0.0.1:${HODHOD_DB_HOST_PORT} (db container not recreated)."
+    return 0
+  fi
+  local cid published
+  cid="$(docker compose ps hodhod-db -q 2>/dev/null | head -1 || true)"
+  if [[ -n "$cid" ]]; then
+    published="$(docker port "$cid" 5432 2>/dev/null | head -1 || true)"
+    if [[ "$published" == *"127.0.0.1:${HODHOD_DB_HOST_PORT}"* ]]; then
+      ui_hint "Postgres already published on 127.0.0.1:${HODHOD_DB_HOST_PORT}."
+      HODHOD_DB_ALREADY_LOCAL=1
+      export HODHOD_DB_ALREADY_LOCAL
+      return 0
+    fi
+    if [[ -n "$published" ]]; then
+      ui_warn "Postgres published on ${published} but app expects 127.0.0.1:${HODHOD_DB_HOST_PORT} — set HODHOD_DB_HOST_PORT or HODHOD_DB_ALREADY_LOCAL=1 in .env."
+    else
+      ui_hint "Publishing Postgres on 127.0.0.1:${HODHOD_DB_HOST_PORT} for host-network app (data volume kept)."
+    fi
+  fi
 }
 
 # Compose file args for hodhod-app (build overlay adds Dockerfile build context).
@@ -669,7 +699,8 @@ compose_up_build_app() {
 }
 
 start_docker_app() {
-  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
+  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE HODHOD_HOST_NETWORK HODHOD_DB_HOST_PORT HODHOD_DB_ALREADY_LOCAL
+  compose_prepare_host_network
   if [[ "$DEPLOY_MODE" == "build" ]]; then
     compose_rebuild_app 0
     return
@@ -864,7 +895,9 @@ do_install() {
 do_update() {
   check_prereqs || return 1
   load_env
-  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE HODHOD_HOST_NETWORK
+  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE HODHOD_HOST_NETWORK HODHOD_DB_HOST_PORT HODHOD_DB_ALREADY_LOCAL
+
+  compose_prepare_host_network
   local build_no_cache="${HODHOD_BUILD_NO_CACHE:-0}"
 
   if [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
