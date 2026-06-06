@@ -1,72 +1,75 @@
 {{define "content"}}
-<div class="flex items-center justify-between mb-6">
-  <h2 class="text-2xl font-bold text-slate-900">Services</h2>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "services.title"}}</h2>
   {{if or .IsMaster .Perms.CreateUser}}
-  <a href="/services/new" class="btn btn-primary btn-sm">+ Create user</a>
+  <a href="/services/new" class="btn btn-primary btn-sm">{{T .Lang "services.create"}}</a>
   {{end}}
 </div>
-<form method="get" action="/services" class="mb-4 flex gap-2 flex-wrap">
-  <input name="q" value="{{.Query}}" placeholder="Search label or username" class="form-input max-w-xs">
-  <select name="status" class="form-input max-w-[10rem]">
-    <option value="">All statuses</option>
-    <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>active</option>
-    <option value="disabled" {{if eq .StatusFilter "disabled"}}selected{{end}}>disabled</option>
-    <option value="expired" {{if eq .StatusFilter "expired"}}selected{{end}}>expired</option>
-  </select>
-  <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+
+<form method="get" action="/services" class="card p-4 mb-4">
+  <div class="flex flex-wrap gap-3 items-end">
+    <label class="form-field flex-1 min-w-[10rem]">
+      <span class="form-label">{{T .Lang "common.search"}}</span>
+      <input name="q" value="{{.Query}}" placeholder="{{T .Lang "services.search_ph"}}" class="form-input">
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">{{T .Lang "services.status_filter"}}</span>
+      <select name="status" class="form-select">
+        <option value="">{{T .Lang "services.all_statuses"}}</option>
+        <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>{{T .Lang "status.active"}}</option>
+        <option value="disabled" {{if eq .StatusFilter "disabled"}}selected{{end}}>{{T .Lang "status.disabled"}}</option>
+        <option value="expired" {{if eq .StatusFilter "expired"}}selected{{end}}>{{T .Lang "status.expired"}}</option>
+      </select>
+    </label>
+    <button type="submit" class="btn btn-secondary btn-sm">{{T .Lang "common.filter"}}</button>
+    {{if or .Query .StatusFilter}}<a href="/services" class="btn btn-muted btn-sm">{{T .Lang "common.clear"}}</a>{{end}}
+  </div>
 </form>
-<div id="qr-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white p-6 rounded-xl"><canvas id="qr-canvas"></canvas><button type="button" onclick="document.getElementById('qr-modal').classList.add('hidden')" class="btn btn-muted mt-3">Close</button></div>
+
+<div id="qr-modal" class="modal-backdrop hidden" data-close role="dialog" aria-modal="true">
+  <div class="modal-panel text-center">
+    <canvas id="qr-canvas" class="mx-auto"></canvas>
+    <button type="button" class="btn btn-muted mt-4" onclick="document.getElementById('qr-modal').classList.add('hidden')">{{T .Lang "common.close"}}</button>
+  </div>
 </div>
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500">
-      <tr>
-        <th class="text-left p-3">Label</th>
-        <th class="text-left p-3">Panel user</th>
-        <th class="text-left p-3">Usage</th>
-        <th class="text-left p-3">Expires</th>
-        <th class="text-left p-3">Status</th>
-        <th class="text-right p-3">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-    {{range .Services}}
-    <tr id="svc-row-{{.ID}}" class="border-t border-slate-100 hover:bg-slate-50">
-      <td class="p-3">{{if .Label}}{{.Label}}{{else}}—{{end}}</td>
-      <td class="p-3 font-mono text-xs">{{.PanelUsername}}</td>
-      <td class="p-3">{{gib .UsedBytes}} / {{gib .DataLimitBytes}}</td>
-      <td class="p-3">{{date .ExpireAt}}</td>
-      <td class="p-3"><span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Status}}</span></td>
-      <td class="p-3 text-right">
-        <div class="flex flex-wrap justify-end gap-1">
-        {{if $.Perms.ModifyUser}}
-        <form class="inline flex flex-wrap gap-1 items-center" method="post" action="/services/{{.ID}}/modify">
-          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-          <input name="volume_gb" type="number" placeholder="GB" class="form-input w-16 text-xs py-1">
-          <input name="expire_at" type="date" class="form-input text-xs py-1">
-          <button type="submit" class="btn btn-secondary btn-sm">Set</button>
-        </form>
-        {{end}}
-        {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button type="submit" class="btn btn-secondary btn-sm">+30d</button></form>{{end}}
-        {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button type="submit" class="btn btn-secondary btn-sm">+10GB</button></form>{{end}}
-        {{if $.Perms.DisableEnable}}{{if eq .Status "active"}}<form class="inline" hx-post="/services/{{.ID}}/disable" hx-target="#svc-row-{{.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>{{end}}{{end}}
-        {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm">Reset</button></form>{{end}}
-        {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form>{{end}}
-        <button type="button" class="btn btn-muted btn-sm" onclick="navigator.clipboard.writeText('{{.SubLink}}')">Copy</button>
-        <button type="button" class="btn btn-muted btn-sm qr-btn" data-sub="{{.SubLink}}">QR</button>
-        </div>
-      </td>
-    </tr>
-    {{else}}
-    <tr><td colspan="6" class="p-8 text-center text-slate-400">No services yet.</td></tr>
-    {{end}}
-    </tbody>
-  </table>
+
+<div class="card desktop-table overflow-hidden">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{T .Lang "services.label"}}</th>
+          <th>{{T .Lang "services.panel_user"}}</th>
+          <th>{{T .Lang "services.usage"}}</th>
+          <th>{{T .Lang "services.expires"}}</th>
+          <th>{{T .Lang "common.status"}}</th>
+          <th class="text-end">{{T .Lang "common.actions"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {{range .Services}}
+      {{template "service_row_tr" (dict "Svc" .)}}
+      {{else}}
+      <tr><td colspan="6" class="text-center py-10 opacity-60">{{T $.Lang "services.empty"}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<div class="space-y-3 md:hidden mt-3">
+  {{range .Services}}
+  {{template "service_card" (dict "Svc" .)}}
+  {{else}}
+  <div class="card p-10 text-center opacity-60">{{T .Lang "services.empty"}}</div>
+  {{end}}
+</div>
+
+{{template "pagination" .}}
+
 <script>
-document.querySelectorAll('.qr-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+document.querySelectorAll('.qr-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
     QRCode.toCanvas(document.getElementById('qr-canvas'), btn.dataset.sub, {width: 200});
     document.getElementById('qr-modal').classList.remove('hidden');
   });

@@ -114,10 +114,7 @@ func (s *Store) ListServicesByAgent(ctx context.Context, agentID int64) ([]Servi
 }
 
 func (s *Store) ListServicesByAgentFiltered(ctx context.Context, agentID int64, q, status string) ([]Service, error) {
-	var out []Service
-	query := s.DB.WithContext(ctx).Where("agent_id = ?", agentID)
-	query = applyServiceFilters(query, q, status)
-	return out, query.Order("id DESC").Find(&out).Error
+	return s.ListServicesByAgentFilteredPaginated(ctx, agentID, q, status, 0, 0)
 }
 
 func (s *Store) ListAllServices(ctx context.Context) ([]Service, error) {
@@ -125,10 +122,77 @@ func (s *Store) ListAllServices(ctx context.Context) ([]Service, error) {
 }
 
 func (s *Store) ListAllServicesFiltered(ctx context.Context, q, status string) ([]Service, error) {
+	return s.ListAllServicesFilteredPaginated(ctx, q, status, 0, 0)
+}
+
+func (s *Store) CountAllServicesFiltered(ctx context.Context, q, status string, panelID int64) (int64, error) {
+	var n int64
+	query := s.DB.WithContext(ctx).Model(&Service{})
+	query = applyServiceFilters(query, q, status)
+	if panelID > 0 {
+		query = query.Where("panel_id = ?", panelID)
+	}
+	return n, query.Count(&n).Error
+}
+
+func (s *Store) CountServicesByAgentFiltered(ctx context.Context, agentID int64, q, status string, panelID int64) (int64, error) {
+	var n int64
+	query := s.DB.WithContext(ctx).Model(&Service{}).Where("agent_id = ?", agentID)
+	query = applyServiceFilters(query, q, status)
+	if panelID > 0 {
+		query = query.Where("panel_id = ?", panelID)
+	}
+	return n, query.Count(&n).Error
+}
+
+func (s *Store) ListAllServicesFilteredPaginated(ctx context.Context, q, status string, limit, offset int) ([]Service, error) {
 	var out []Service
 	query := s.DB.WithContext(ctx).Model(&Service{})
 	query = applyServiceFilters(query, q, status)
-	return out, query.Order("id DESC").Find(&out).Error
+	query = query.Order("id DESC")
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+	return out, query.Find(&out).Error
+}
+
+func (s *Store) ListServicesByAgentFilteredPaginated(ctx context.Context, agentID int64, q, status string, limit, offset int) ([]Service, error) {
+	var out []Service
+	query := s.DB.WithContext(ctx).Where("agent_id = ?", agentID)
+	query = applyServiceFilters(query, q, status)
+	query = query.Order("id DESC")
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+	return out, query.Find(&out).Error
+}
+
+func (s *Store) ListAllServicesFilteredForPanel(ctx context.Context, q, status string, panelID int64, limit, offset int) ([]Service, error) {
+	var out []Service
+	query := s.DB.WithContext(ctx).Model(&Service{})
+	query = applyServiceFilters(query, q, status)
+	if panelID > 0 {
+		query = query.Where("panel_id = ?", panelID)
+	}
+	query = query.Order("id DESC")
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+	return out, query.Find(&out).Error
+}
+
+func (s *Store) ListServicesByAgentFilteredForPanel(ctx context.Context, agentID int64, q, status string, panelID int64, limit, offset int) ([]Service, error) {
+	var out []Service
+	query := s.DB.WithContext(ctx).Where("agent_id = ?", agentID)
+	query = applyServiceFilters(query, q, status)
+	if panelID > 0 {
+		query = query.Where("panel_id = ?", panelID)
+	}
+	query = query.Order("id DESC")
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+	return out, query.Find(&out).Error
 }
 
 func applyServiceFilters(q *gorm.DB, search, status string) *gorm.DB {
@@ -180,6 +244,34 @@ func (s *Store) SumApprovedPaymentsByAgent(ctx context.Context, agentID int64) (
 }
 
 func (s *Store) ListPaymentsByAgent(ctx context.Context, agentID int64, status PaymentStatus) ([]Payment, error) {
+	return s.ListPaymentsByAgentPaginated(ctx, agentID, status, 0, 0)
+}
+
+func (s *Store) ListAllPayments(ctx context.Context, status PaymentStatus) ([]Payment, error) {
+	return s.ListAllPaymentsPaginated(ctx, status, 0, 0)
+}
+
+func (s *Store) CountPaymentsByAgent(ctx context.Context, agentID int64, status PaymentStatus) (int64, error) {
+	var n int64
+	q := s.DB.WithContext(ctx).Model(&Payment{}).
+		Joins("JOIN bots ON bots.id = payments.bot_id").
+		Where("bots.agent_id = ?", agentID)
+	if status != "" {
+		q = q.Where("payments.status = ?", status)
+	}
+	return n, q.Count(&n).Error
+}
+
+func (s *Store) CountAllPayments(ctx context.Context, status PaymentStatus) (int64, error) {
+	var n int64
+	q := s.DB.WithContext(ctx).Model(&Payment{})
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	return n, q.Count(&n).Error
+}
+
+func (s *Store) ListPaymentsByAgentPaginated(ctx context.Context, agentID int64, status PaymentStatus, limit, offset int) ([]Payment, error) {
 	var out []Payment
 	q := s.DB.WithContext(ctx).
 		Joins("JOIN bots ON bots.id = payments.bot_id").
@@ -187,16 +279,24 @@ func (s *Store) ListPaymentsByAgent(ctx context.Context, agentID int64, status P
 	if status != "" {
 		q = q.Where("payments.status = ?", status)
 	}
-	return out, q.Order("payments.id DESC").Find(&out).Error
+	q = q.Order("payments.id DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	return out, q.Find(&out).Error
 }
 
-func (s *Store) ListAllPayments(ctx context.Context, status PaymentStatus) ([]Payment, error) {
+func (s *Store) ListAllPaymentsPaginated(ctx context.Context, status PaymentStatus, limit, offset int) ([]Payment, error) {
 	var out []Payment
 	q := s.DB.WithContext(ctx).Model(&Payment{})
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
-	return out, q.Order("id DESC").Find(&out).Error
+	q = q.Order("id DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	return out, q.Find(&out).Error
 }
 
 func (s *Store) CountBots(ctx context.Context) (int64, error) {

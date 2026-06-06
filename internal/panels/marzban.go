@@ -264,3 +264,11 @@ func (c *marzbanClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
 	}
 	return out, nil
 }
+
+func (c *marzbanClient) ListUsersPaged(ctx context.Context, opts UserListOptions) (*UserListPage, error) {
+	all, err := c.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sliceUserListPage(all, opts), nil
+}

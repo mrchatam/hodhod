@@ -21,22 +21,124 @@ func (s *Server) pagePanelUsers(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	f := s.panelUserFiltersFromRequest(r)
+	pag := paginationFromRequest(r, 0, "q", "inbound", "status", "source", "agent_id")
+	agents := s.agentNameMap(r.Context())
+	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
+	allAgents, _ := s.Store.ListAgents(r.Context())
+
 	client, err := s.Panels.Get(r.Context(), panelID)
 	if err != nil {
-		s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, nil, nil, err))
+		s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, nil, nil, err, map[string]any{
+			"Stats": panelUserStats{}, "Filters": f, "Templates": templates, "Agents": allAgents,
+			"Pagination": pag, "PanelListErr": err,
+		}))
 		return
 	}
 	inbounds, _ := client.ListInbounds(r.Context())
-	panelUsers, panelErr := client.ListUsers(r.Context())
-	services, _ := s.Store.ListServicesForPanel(r.Context(), panelID)
-	agents := s.agentNameMap(r.Context())
-	f := s.panelUserFiltersFromRequest(r)
-	rows, stats := mergePanelUsers(panelUsers, services, agents, inbounds, f)
-	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
-	allAgents, _ := s.Store.ListAgents(r.Context())
+
+	if f.Source == "hodhod" {
+		s.renderPanelUsersHodhodPage(w, r, panel, inbounds, f, pag, agents, templates, allAgents)
+		return
+	}
+
+	statusFilter := f.Status
+	if statusFilter == "all" {
+		statusFilter = ""
+	}
+	page, err := client.ListUsersPaged(r.Context(), panels.UserListOptions{
+		Page: pag.Page, PageSize: pag.PerPage, Search: f.Query, Status: statusFilter,
+	})
+	var panelErr error
+	var rows []PanelUserRow
+	stats := panelUserStats{}
+	if err != nil {
+		panelErr = err
+	} else {
+		usernames := make([]string, len(page.Users))
+		for i, u := range page.Users {
+			usernames[i] = u.Username
+		}
+		services, _ := s.Store.ListServicesForPanelUsernames(r.Context(), panelID, usernames)
+		rows, stats = mergePanelUsersPage(page.Users, services, agents, inbounds, f)
+		if f.Source == "both" {
+			filtered := rows[:0]
+			for _, row := range rows {
+				if row.Source == "both" {
+					filtered = append(filtered, row)
+				}
+			}
+			rows = filtered
+			stats.Shown = len(rows)
+		}
+		if f.Source == "panel" {
+			for i := range rows {
+				if rows[i].Source == "both" {
+					rows[i].Source = "panel"
+				}
+			}
+		}
+		pag.Total = page.Filtered
+		if pag.Total == 0 {
+			pag.Total = page.Total
+		}
+		stats.PanelCount = page.Total
+	}
+
 	s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, inbounds, rows, panelErr, map[string]any{
 		"Stats": stats, "Filters": f, "Templates": templates, "Agents": allAgents,
-		"PanelListErr": panelErr,
+		"PanelListErr": panelErr, "Pagination": pag,
+	}))
+}
+
+func (s *Server) renderPanelUsersHodhodPage(w http.ResponseWriter, r *http.Request, panel *db.Panel, inbounds []panels.InboundInfo, f panelUserFilters, pag Pagination, agents map[int64]string, templates []UserCreateTemplate, allAgents []db.Agent) {
+	allSvc, _ := s.Store.ListServicesForPanel(r.Context(), panel.ID)
+	var hodhodOnly []db.Service
+	for _, svc := range allSvc {
+		if f.AgentID > 0 && svc.AgentID != f.AgentID {
+			continue
+		}
+		hodhodOnly = append(hodhodOnly, svc)
+	}
+	var panelUsers []panels.UserInfo
+	if client, err := s.Panels.Get(r.Context(), panel.ID); err == nil {
+		panelUsers, _ = client.ListUsers(r.Context())
+	}
+	onPanel := map[string]bool{}
+	for _, u := range panelUsers {
+		onPanel[u.Username] = true
+	}
+	var filtered []db.Service
+	for _, svc := range hodhodOnly {
+		if onPanel[svc.PanelUsername] {
+			continue
+		}
+		row := panelUserRowFromService(svc, agents)
+		if matchPanelUserFilters(row, f) {
+			filtered = append(filtered, svc)
+		}
+	}
+	pag.Total = len(filtered)
+	start := pag.Offset()
+	end := start + pag.PerPage
+	if start > len(filtered) {
+		start = len(filtered)
+	}
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	pageSvc := filtered[start:end]
+	var rows []PanelUserRow
+	for _, svc := range pageSvc {
+		row := panelUserRowFromService(svc, agents)
+		row.Source = "hodhod"
+		row.HodhodOnly = true
+		rows = append(rows, row)
+	}
+	stats := panelUserStats{HodhodCount: len(hodhodOnly), Shown: len(rows), PanelCount: len(panelUsers)}
+	s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, inbounds, rows, nil, map[string]any{
+		"Stats": stats, "Filters": f, "Templates": templates, "Agents": allAgents,
+		"Pagination": pag,
 	}))
 }
 
@@ -140,6 +242,25 @@ func (s *Server) postPanelUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.panelUserCreateResponse(w, r, panelID, err, err.Error())
 		return
+	}
+	if v := r.FormValue("agent_id"); v != "" {
+		agentID, _ := strconv.ParseInt(v, 10, 64)
+		if agentID > 0 {
+			_ = s.Store.UpsertAgentUserGrant(r.Context(), &db.AgentUserGrant{
+				AgentID: agentID, PanelID: panelID, PanelUsername: req.Username,
+				AllowView: true, AllowModify: true,
+			})
+			if _, err := s.Store.GetServiceByPanelUsername(r.Context(), panelID, req.Username); err != nil {
+				sub, _ := client.SubscriptionURL(r.Context(), req.Username)
+				admin := r.Context().Value(ctxAdmin).(*db.Admin)
+				adminID := admin.ID
+				_ = s.Store.CreateService(r.Context(), &db.Service{
+					AgentID: agentID, Source: db.ServiceSourcePanel, PanelID: panelID,
+					PanelUsername: req.Username, SubLink: sub, DataLimitBytes: req.DataLimitBytes,
+					ExpireAt: &expire, Status: "active", CreatedByAdminID: &adminID,
+				})
+			}
+		}
 	}
 	if r.Header.Get("HX-Request") != "" {
 		w.Header().Set("HX-Redirect", fmt.Sprintf("/master/panels/%d/users", panelID))

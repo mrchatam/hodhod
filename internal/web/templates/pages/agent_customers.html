@@ -1,0 +1,56 @@
+{{define "content"}}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <div>
+    <h2 class="text-2xl font-bold">{{T .Lang "customers.title"}}</h2>
+    <p class="text-sm opacity-60 mt-1">{{T .Lang "customers.pick_panel"}}</p>
+  </div>
+  {{if .CanCreate}}
+  <a href="/customers/new" class="btn btn-primary btn-sm">{{T .Lang "customers.create"}}</a>
+  {{end}}
+</div>
+
+<form method="get" action="/customers" class="card p-4 mb-4 sticky top-0 z-10">
+  <div class="flex flex-wrap gap-3 items-end">
+    <label class="form-field flex-1 min-w-[10rem]">
+      <span class="form-label">{{T .Lang "common.search"}}</span>
+      <input name="q" value="{{.Query}}" class="form-input">
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">{{T .Lang "common.status"}}</span>
+      <select name="status" class="form-select">
+        <option value="">{{T .Lang "common.all"}}</option>
+        <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>{{T .Lang "status.active"}}</option>
+        <option value="disabled" {{if eq .StatusFilter "disabled"}}selected{{end}}>{{T .Lang "status.disabled"}}</option>
+        <option value="expired" {{if eq .StatusFilter "expired"}}selected{{end}}>{{T .Lang "status.expired"}}</option>
+      </select>
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">{{T .Lang "table.panel"}}</span>
+      <select name="panel_id" class="form-select">
+        <option value="">{{T .Lang "common.all"}}</option>
+        {{range .Panels}}<option value="{{.ID}}" {{if eq $.PanelID .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-secondary btn-sm">{{T .Lang "common.filter"}}</button>
+  </div>
+</form>
+
+<div class="space-y-2">
+  {{range .Rows}}
+  <div class="card p-4 cursor-pointer hover:border-brand-500/40" onclick="location.href='/agent/panels/{{.PanelID}}/customers'">
+    <div class="flex items-center justify-between gap-2">
+      <div>
+        <p class="font-mono text-sm">{{.Username}}</p>
+        {{if .Label}}<p class="text-xs opacity-60">{{.Label}}</p>{{end}}
+      </div>
+      {{template "panel_user_status_badge" .}}
+    </div>
+    <div class="usage-bar mt-2"><div class="usage-bar-fill" style="width:{{usagePct .UsedBytes .DataLimitBytes}}%"></div></div>
+    <p class="text-xs opacity-60 mt-1">{{gib .UsedBytes}} / {{gib .DataLimitBytes}} · {{time .ExpireAt}}</p>
+  </div>
+  {{else}}
+  <div class="card p-10 text-center opacity-60">{{if .CanCreate}}{{T .Lang "customers.no_create"}}{{else}}{{T .Lang "panel_users.empty"}}{{end}}</div>
+  {{end}}
+</div>
+{{template "pagination" .}}
+{{end}}

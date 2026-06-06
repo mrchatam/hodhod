@@ -14,8 +14,12 @@ import (
 )
 
 var (
-	ErrForbidden     = errors.New("sales: forbidden")
-	ErrQuotaExceeded = errors.New("sales: quota exceeded")
+	ErrForbidden        = errors.New("sales: forbidden")
+	ErrViewOnly         = errors.New("sales: view_only")
+	ErrPermDenied       = errors.New("sales: perm_denied")
+	ErrPanelNotAssigned = errors.New("sales: panel_not_assigned")
+	ErrNoCreateInbound  = errors.New("sales: no_create_inbound")
+	ErrQuotaExceeded    = errors.New("sales: quota exceeded")
 )
 
 // Service performs permission-checked panel operations for sellers and bots.
@@ -61,22 +65,44 @@ func (s *Service) checkPerm(ctx context.Context, agentID int64, isMaster bool, p
 		return err
 	}
 	if p.ViewOnly && perm != "" {
-		return ErrForbidden
+		return ErrViewOnly
 	}
-	if !p.Has(perm) {
-		return ErrForbidden
+	if perm != "" && !p.Has(perm) {
+		return ErrPermDenied
 	}
 	return nil
 }
 
-func (s *Service) loadScope(ctx context.Context, agentID, panelID int64) (panels.Scope, *db.AgentPanel, error) {
+func (s *Service) loadCreateScope(ctx context.Context, agentID, panelID int64, isMaster bool) (panels.Scope, *db.AgentPanel, error) {
 	ap, err := s.Store.GetAgentPanel(ctx, agentID, panelID)
 	if err != nil {
-		// fallback: bot_panels scope not handled here for manual create
 		return panels.Scope{}, nil, err
+	}
+	if !isMaster {
+		ids, err := s.Store.ListAgentInboundCreateIDs(ctx, agentID, panelID)
+		if err != nil {
+			return panels.Scope{}, ap, err
+		}
+		if len(ids) == 0 {
+			var scope panels.Scope
+			_ = json.Unmarshal(ap.ScopeJSON, &scope)
+			if len(scope.InboundIDs) == 0 && scope.InboundID > 0 {
+				scope.InboundIDs = []int{scope.InboundID}
+			}
+			if len(scope.InboundIDs) > 0 {
+				ids = scope.InboundIDs
+			}
+		}
+		if len(ids) == 0 {
+			return panels.Scope{}, ap, ErrNoCreateInbound
+		}
+		return panels.Scope{InboundIDs: ids}, ap, nil
 	}
 	var scope panels.Scope
 	_ = json.Unmarshal(ap.ScopeJSON, &scope)
+	if len(scope.InboundIDs) == 0 && scope.InboundID > 0 {
+		scope.InboundIDs = []int{scope.InboundID}
+	}
 	return scope, ap, nil
 }
 
@@ -109,10 +135,13 @@ func (s *Service) CreateManualService(ctx context.Context, in CreateManualInput)
 		return nil, err
 	}
 	ok, err := s.Store.AgentHasPanel(ctx, in.AgentID, in.PanelID)
-	if err != nil || !ok {
-		return nil, ErrForbidden
+	if err != nil {
+		return nil, err
 	}
-	scope, ap, err := s.loadScope(ctx, in.AgentID, in.PanelID)
+	if !ok {
+		return nil, ErrPanelNotAssigned
+	}
+	scope, ap, err := s.loadCreateScope(ctx, in.AgentID, in.PanelID, in.IsMaster)
 	if err != nil {
 		return nil, err
 	}

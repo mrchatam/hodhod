@@ -101,6 +101,26 @@ type AgentPanel struct {
 	ExpiryCapDays int            `gorm:"not null;default:0"`
 }
 
+// AgentInboundGrant controls per-inbound create/view toggles for a seller on a panel.
+type AgentInboundGrant struct {
+	ID             int64 `gorm:"primaryKey"`
+	AgentID        int64 `gorm:"not null;uniqueIndex:idx_agent_inbound_grant"`
+	PanelID        int64 `gorm:"not null;uniqueIndex:idx_agent_inbound_grant"`
+	InboundID      int   `gorm:"not null;uniqueIndex:idx_agent_inbound_grant"`
+	AllowCreate    bool  `gorm:"not null;default:false"`
+	AllowViewUsers bool  `gorm:"not null;default:false"`
+}
+
+// AgentUserGrant controls per-user view/modify toggles for a seller on a panel.
+type AgentUserGrant struct {
+	ID            int64  `gorm:"primaryKey"`
+	AgentID       int64  `gorm:"not null;uniqueIndex:idx_agent_user_grant"`
+	PanelID       int64  `gorm:"not null;uniqueIndex:idx_agent_user_grant"`
+	PanelUsername string `gorm:"not null;uniqueIndex:idx_agent_user_grant"`
+	AllowView     bool   `gorm:"not null;default:false"`
+	AllowModify   bool   `gorm:"not null;default:false"`
+}
+
 // Customer groups manual panel services for a seller.
 type Customer struct {
 	ID        int64  `gorm:"primaryKey"`

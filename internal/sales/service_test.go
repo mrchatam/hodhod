@@ -51,6 +51,27 @@ func (m *mockPanel) ListUsers(context.Context) ([]panels.UserInfo, error) {
 	}
 	return out, nil
 }
+func (m *mockPanel) ListUsersPaged(_ context.Context, opts panels.UserListOptions) (*panels.UserListPage, error) {
+	all, _ := m.ListUsers(context.Background())
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+	ps := opts.PageSize
+	if ps < 1 {
+		ps = 25
+	}
+	total := len(all)
+	start := (page - 1) * ps
+	if start > total {
+		start = total
+	}
+	end := start + ps
+	if end > total {
+		end = total
+	}
+	return &panels.UserListPage{Users: all[start:end], Total: total, Filtered: total, Page: page, PageSize: ps}, nil
+}
 func (m *mockPanel) Kind() panels.PanelKind               { return panels.KindMarzban }
 func (m *mockPanel) TestConnection(context.Context) error { return nil }
 

@@ -9,22 +9,24 @@ import (
 	"time"
 
 	"github.com/mrchatam/hodhod/internal/db"
+	"github.com/mrchatam/hodhod/internal/i18n"
 )
 
-//go:embed templates/layout.html templates/partials/*.html templates/pages/*.html templates/login.html
+//go:embed templates/layout.html templates/partials/*.html templates/pages/*.html templates/login.html static/app.css
 var templateFS embed.FS
 
 var pageNames = []string{
 	"dashboard", "payments", "services", "service_create", "onboarding",
-	"agents", "agent_edit", "agent_panels", "panels", "panel_edit", "panel_users", "panel_backups", "bots", "bot_settings",
+	"agents", "agent_edit", "agent_panels", "agent_customers", "agent_panel_customers", "customer_create", "panels", "panel_edit", "panel_users", "panel_backups", "bots", "bot_settings",
 	"agent_bots", "agent_plans", "agent_bot_settings",
 }
 
 func parseTemplates() (map[string]*template.Template, *template.Template, error) {
 	funcs := template.FuncMap{
-		"toman": formatToman,
-		"gib":   formatGiB,
-		"date":  formatDate,
+		"T":           i18n.Admin,
+		"toman":       formatToman,
+		"gib":         formatGiB,
+		"date":        formatDate,
 		"time":        formatTime,
 		"deref":       derefInt64,
 		"derefStr":    derefString,
@@ -32,6 +34,10 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		"dict":        templateDict,
 		"urlPath":     urlPathEscape,
 		"inboundLabel": formatInboundLabels,
+		"usagePct":    usagePercent,
+		"add":         func(a, b int) int { return a + b },
+		"sub":         func(a, b int) int { return a - b },
+		"seq":         seqPages,
 	}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
@@ -46,7 +52,7 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		}
 		pages[name] = t
 	}
-	loginT, err := template.ParseFS(templateFS, "templates/login.html")
+	loginT, err := template.New("login").Funcs(funcs).ParseFS(templateFS, "templates/login.html")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -121,4 +127,29 @@ func templateDict(values ...any) (map[string]any, error) {
 
 func urlPathEscape(s string) string {
 	return url.PathEscape(s)
+}
+
+func usagePercent(used, limit int64) int {
+	if limit <= 0 {
+		return 0
+	}
+	p := int(float64(used) / float64(limit) * 100)
+	if p > 100 {
+		return 100
+	}
+	if p < 0 {
+		return 0
+	}
+	return p
+}
+
+func seqPages(n int) []int {
+	if n <= 0 {
+		return nil
+	}
+	out := make([]int, n)
+	for i := range out {
+		out[i] = i
+	}
+	return out
 }

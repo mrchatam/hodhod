@@ -1,0 +1,73 @@
+{{define "content"}}
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+  <div>
+    <a href="/customers" class="btn btn-link btn-sm mb-2">← {{T .Lang "customers.title"}}</a>
+    <h2 class="text-2xl font-bold">{{.Panel.Name}}</h2>
+  </div>
+  {{if .CanCreate}}
+  <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('create-modal').classList.remove('hidden')">{{T .Lang "customers.create"}}</button>
+  {{end}}
+</div>
+
+<form method="get" class="card p-4 mb-4">
+  <div class="flex flex-wrap gap-3 items-end">
+    <label class="form-field flex-1 min-w-[10rem]">
+      <span class="form-label">{{T .Lang "common.search"}}</span>
+      <input name="q" value="{{.Filters.Query}}" class="form-input">
+    </label>
+    <label class="form-field min-w-[8rem]">
+      <span class="form-label">{{T .Lang "common.status"}}</span>
+      <select name="status" class="form-select">
+        <option value="all" {{if eq .Filters.Status "all"}}selected{{end}}>{{T .Lang "common.all"}}</option>
+        <option value="active" {{if eq .Filters.Status "active"}}selected{{end}}>{{T .Lang "status.active"}}</option>
+        <option value="disabled" {{if eq .Filters.Status "disabled"}}selected{{end}}>{{T .Lang "status.disabled"}}</option>
+        <option value="expired" {{if eq .Filters.Status "expired"}}selected{{end}}>{{T .Lang "status.expired"}}</option>
+      </select>
+    </label>
+    <button type="submit" class="btn btn-secondary btn-sm">{{T .Lang "common.filter"}}</button>
+  </div>
+</form>
+
+<div class="card overflow-hidden">
+  <div class="data-table-wrap">
+    <table class="data-table min-w-[640px]">
+      <thead>
+        <tr>
+          <th>{{T .Lang "table.username"}}</th>
+          <th>{{T .Lang "services.usage"}}</th>
+          <th>{{T .Lang "services.expires"}}</th>
+          <th>{{T .Lang "common.status"}}</th>
+          <th class="text-end">{{T .Lang "common.actions"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {{range .Rows}}
+      {{template "agent_customer_row" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Perms" $.Perms "Lang" $.Lang)}}
+      {{else}}
+      <tr><td colspan="5" class="text-center py-10 opacity-60">{{T .Lang "panel_users.empty"}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{template "pagination" .}}
+
+<div id="create-modal" class="modal-backdrop {{if not .ShowCreateModal}}hidden{{end}}">
+  <div class="modal-panel">
+    <h3 class="font-semibold mb-4">{{T .Lang "users.create_modal"}}</h3>
+    <form method="post" action="/agent/panels/{{.Panel.ID}}/users" class="space-y-4">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <label class="form-field"><span class="form-label">{{T .Lang "services.label"}}</span><input name="label" class="form-input"></label>
+      <label class="form-field"><span class="form-label">{{T .Lang "services.contact"}}</span><input name="contact" class="form-input"></label>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-field"><span class="form-label">{{T .Lang "panel_users.volume"}}</span><input name="volume_gb" type="number" value="30" class="form-input"></label>
+        <label class="form-field"><span class="form-label">{{T .Lang "panel_users.duration"}}</span><input name="duration_days" type="number" value="30" class="form-input"></label>
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn btn-muted btn-sm" onclick="document.getElementById('create-modal').classList.add('hidden')">{{T .Lang "common.cancel"}}</button>
+        <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.create"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

@@ -68,6 +68,23 @@ type InboundInfo struct {
 	Port int
 }
 
+// UserListOptions filters and pages panel user listing.
+type UserListOptions struct {
+	Page     int
+	PageSize int
+	Search   string
+	Status   string // active, disabled, expired, all
+}
+
+// UserListPage is a paginated panel user result.
+type UserListPage struct {
+	Users    []UserInfo
+	Total    int
+	Filtered int
+	Page     int
+	PageSize int
+}
+
 // Client is the panel adapter contract.
 type Client interface {
 	CreateUser(ctx context.Context, req CreateUserRequest) (*UserInfo, error)
@@ -80,6 +97,7 @@ type Client interface {
 	SubscriptionURL(ctx context.Context, username string) (string, error)
 	ListInbounds(ctx context.Context) ([]InboundInfo, error)
 	ListUsers(ctx context.Context) ([]UserInfo, error)
+	ListUsersPaged(ctx context.Context, opts UserListOptions) (*UserListPage, error)
 	Kind() PanelKind
 	TestConnection(ctx context.Context) error
 }

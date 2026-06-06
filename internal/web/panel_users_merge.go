@@ -24,6 +24,9 @@ type PanelUserRow struct {
 	InboundIDs     []int
 	InboundTags    []string
 	HodhodOnly     bool
+	CanModify      bool
+	SubLink        string
+	PanelID        int64
 }
 
 type panelUserFilters struct {
@@ -97,6 +100,37 @@ func mergePanelUsers(panelUsers []panels.UserInfo, services []db.Service, agents
 		addRow(row)
 	}
 
+	return rows, stats
+}
+
+// mergePanelUsersPage merges one page of panel users with Hodhod services.
+func mergePanelUsersPage(panelUsers []panels.UserInfo, services []db.Service, agents map[int64]string, inbounds []panels.InboundInfo, f panelUserFilters) ([]PanelUserRow, panelUserStats) {
+	inboundTags := map[int]string{}
+	for _, inb := range inbounds {
+		inboundTags[inb.ID] = inb.Tag
+	}
+	svcByUser := map[string]db.Service{}
+	for _, svc := range services {
+		if f.AgentID > 0 && svc.AgentID != f.AgentID {
+			continue
+		}
+		svcByUser[svc.PanelUsername] = svc
+	}
+	var rows []PanelUserRow
+	stats := panelUserStats{PanelCount: len(panelUsers), HodhodCount: len(svcByUser)}
+	for _, u := range panelUsers {
+		row := panelUserRowFromPanel(u, inboundTags)
+		if svc, ok := svcByUser[u.Username]; ok {
+			row = mergePanelUserWithService(row, svc, agents)
+			row.Source = "both"
+		} else {
+			row.Source = "panel"
+		}
+		if matchPanelUserFilters(row, f) {
+			rows = append(rows, row)
+			stats.Shown++
+		}
+	}
 	return rows, stats
 }
 

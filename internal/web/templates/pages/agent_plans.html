@@ -1,44 +1,89 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">Plans</h2>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "agent_plans.title"}}</h2>
+  <a href="/agent/plans" class="btn btn-primary btn-sm md:hidden">{{T .Lang "agent_plans.add"}}</a>
+</div>
+
 <div class="grid lg:grid-cols-2 gap-6">
-  <div class="bg-white rounded-xl border overflow-hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-slate-50"><tr><th class="p-3 text-left">Name</th><th class="p-3">GB</th><th class="p-3">Days</th><th class="p-3">Price</th><th class="p-3"></th></tr></thead>
-      <tbody>
-      {{range .Plans}}
-      <tr class="border-t">
-        <td class="p-3">{{.Name}} <span class="text-xs text-slate-400">{{.Status}}</span></td>
-        <td class="p-3 text-center">{{.VolumeGB}}</td>
-        <td class="p-3 text-center">{{.DurationDays}}</td>
-        <td class="p-3 text-center">{{toman .PriceToman}} Toman</td>
-        <td class="p-3 text-right">
-          <details><summary class="btn btn-link btn-sm cursor-pointer">Edit</summary>
-          <form method="post" action="/agent/plans/{{.ID}}" class="mt-2 space-y-1 text-left">
-            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <input type="hidden" name="bot_id" value="{{.BotID}}">
-            <input name="name" value="{{.Name}}" class="form-input text-xs">
-            <input name="volume_gb" type="number" value="{{.VolumeGB}}" class="form-input text-xs">
-            <input name="duration_days" type="number" value="{{.DurationDays}}" class="form-input text-xs">
-            <input name="price_toman" type="number" value="{{.PriceToman}}" class="form-input text-xs">
-            <button type="submit" class="btn btn-secondary btn-sm">Save</button>
-          </form>
-          {{if eq .Status "active"}}<form method="post" action="/agent/plans/{{.ID}}/disable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="bot_id" value="{{.BotID}}"><button type="submit" class="btn btn-danger btn-sm">Disable</button></form>{{end}}
-          </details>
-        </td>
-      </tr>
-      {{end}}
-      </tbody>
-    </table>
+  <div class="card desktop-table overflow-hidden">
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>{{T .Lang "table.name"}}</th>
+            <th>{{T .Lang "table.volume"}}</th>
+            <th>{{T .Lang "table.duration"}}</th>
+            <th>{{T .Lang "table.price"}}</th>
+            <th class="text-end">{{T .Lang "common.actions"}}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {{range .Plans}}
+        <tr>
+          <td>{{.Name}} <span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}} ml-1">{{.Status}}</span></td>
+          <td class="text-center">{{.VolumeGB}}</td>
+          <td class="text-center">{{.DurationDays}}</td>
+          <td class="text-center">{{toman .PriceToman}}</td>
+          <td class="text-end">
+            <details>
+              <summary class="btn btn-link btn-sm cursor-pointer">{{T $.Lang "agent_plans.edit"}}</summary>
+              <form method="post" action="/agent/plans/{{.ID}}" class="card p-3 mt-2 space-y-2 text-start min-w-[12rem]">
+                <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+                <input type="hidden" name="bot_id" value="{{.BotID}}">
+                <input name="name" value="{{.Name}}" class="form-input text-xs">
+                <input name="volume_gb" type="number" value="{{.VolumeGB}}" class="form-input text-xs">
+                <input name="duration_days" type="number" value="{{.DurationDays}}" class="form-input text-xs">
+                <input name="price_toman" type="number" value="{{.PriceToman}}" class="form-input text-xs">
+                <button type="submit" class="btn btn-secondary btn-sm w-full">{{T $.Lang "common.save"}}</button>
+              </form>
+              {{if eq .Status "active"}}<form method="post" action="/agent/plans/{{.ID}}/disable" class="mt-1"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="bot_id" value="{{.BotID}}"><button type="submit" class="btn btn-danger btn-sm w-full">{{T $.Lang "common.disable"}}</button></form>{{end}}
+            </details>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center py-10 opacity-60">{{T $.Lang "agent_plans.empty"}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
   </div>
-  <form method="post" action="/agent/plans" class="bg-white rounded-xl border p-6 space-y-4 h-fit">
+
+  <div class="space-y-3 md:hidden">
+    {{range .Plans}}
+    <div class="mobile-card">
+      <div class="flex justify-between items-start">
+        <span class="font-medium">{{.Name}}</span>
+        <span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Status}}</span>
+      </div>
+      <p class="text-sm opacity-60">{{.VolumeGB}} GB · {{.DurationDays}}d · {{toman .PriceToman}}</p>
+      <details class="mt-2">
+        <summary class="btn btn-link btn-sm cursor-pointer">{{T $.Lang "agent_plans.edit"}}</summary>
+        <form method="post" action="/agent/plans/{{.ID}}" class="space-y-2 mt-2">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="bot_id" value="{{.BotID}}">
+          <input name="name" value="{{.Name}}" class="form-input text-xs">
+          <input name="volume_gb" type="number" value="{{.VolumeGB}}" class="form-input text-xs">
+          <input name="duration_days" type="number" value="{{.DurationDays}}" class="form-input text-xs">
+          <input name="price_toman" type="number" value="{{.PriceToman}}" class="form-input text-xs">
+          <button type="submit" class="btn btn-secondary btn-sm">{{T $.Lang "common.save"}}</button>
+        </form>
+      </details>
+    </div>
+    {{else}}
+    <div class="card p-10 text-center opacity-60">{{T .Lang "agent_plans.empty"}}</div>
+    {{end}}
+  </div>
+
+  <form method="post" action="/agent/plans" class="card p-6 space-y-4 h-fit hidden md:block">
+    <h3 class="font-semibold">{{T .Lang "agent_plans.add"}}</h3>
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <select name="bot_id" class="form-input">{{range .Bots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}</select>
-    <select name="panel_id" class="form-input">{{range .PanelOptions}}<option value="{{.PanelID}}">Bot {{.BotID}} → {{.PanelName}}</option>{{end}}</select>
-    <input name="name" placeholder="Plan name" class="form-input" required>
-    <input name="volume_gb" type="number" placeholder="Volume GB" class="form-input" required>
-    <input name="duration_days" type="number" placeholder="Duration days" class="form-input" required>
-    <input name="price_toman" type="number" placeholder="Price (Toman)" class="form-input" required>
-    <button type="submit" class="btn btn-primary">Add plan</button>
+    <select name="bot_id" class="form-select">{{range .Bots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}</select>
+    <select name="panel_id" class="form-select">{{range .PanelOptions}}<option value="{{.PanelID}}">{{T $.Lang "table.bot"}} {{.BotID}} → {{.PanelName}}</option>{{end}}</select>
+    <input name="name" placeholder="{{T .Lang "agent_plans.plan_name"}}" class="form-input" required>
+    <input name="volume_gb" type="number" placeholder="{{T .Lang "agent_plans.volume_ph"}}" class="form-input" required>
+    <input name="duration_days" type="number" placeholder="{{T .Lang "agent_plans.duration_ph"}}" class="form-input" required>
+    <input name="price_toman" type="number" placeholder="{{T .Lang "agent_plans.price_ph"}}" class="form-input" required>
+    <button type="submit" class="btn btn-primary">{{T .Lang "agent_plans.add"}}</button>
   </form>
 </div>
 {{end}}

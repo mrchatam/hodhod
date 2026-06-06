@@ -1,34 +1,39 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">Bots</h2>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "bots.title"}}</h2>
+</div>
+
 <div class="grid lg:grid-cols-2 gap-6">
-  <div class="space-y-3">{{range .Bots}}
-  <div class="bg-white rounded-xl border p-4 flex justify-between items-center">
-    <div>
-      <p class="font-medium">@{{.Username}} <span class="text-xs text-slate-400">{{.PublicID}}</span></p>
-      <p class="text-xs text-slate-500">Agent {{.AgentID}} · {{.Status}}</p>
+  <div class="space-y-3">
+    {{range .Bots}}
+    <div class="card p-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+      <div>
+        <p class="font-medium">@{{.Username}} <span class="text-xs opacity-60">{{.PublicID}}</span></p>
+        <p class="text-xs opacity-60">{{T $.Lang "table.agent"}} {{.AgentID}} · {{.Status}}</p>
+      </div>
+      <a href="/master/bots/{{.ID}}/settings" class="btn btn-secondary btn-sm">{{T $.Lang "bots.settings"}}</a>
     </div>
-    <a href="/master/bots/{{.ID}}/settings" class="btn btn-secondary btn-sm">Settings</a>
-  </div>{{else}}
-  <p class="text-slate-400 text-sm">No bots yet.</p>
-  {{end}}</div>
-  <form method="post" action="/master/bots" class="bg-white rounded-xl border p-6 space-y-4 h-fit">
-    <h3 class="font-semibold text-slate-800">Add bot</h3>
+    {{else}}
+    <div class="card p-10 text-center opacity-60">{{T .Lang "bots.empty"}}</div>
+    {{end}}
+  </div>
+
+  <form method="post" action="/master/bots" class="card p-6 space-y-4 h-fit">
+    <h3 class="font-semibold">{{T .Lang "bots.add"}}</h3>
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <label class="form-field">
-      <span class="form-label">Agent</span>
-      <select name="agent_id" class="form-input">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+      <span class="form-label">{{T .Lang "table.agent"}}</span>
+      <select name="agent_id" class="form-select">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
     </label>
     <label class="form-field">
-      <span class="form-label">Bot token</span>
+      <span class="form-label">{{T .Lang "bots.token"}}</span>
       <input name="token" class="form-input" placeholder="123456789:AAH..." required>
-      <p class="form-hint">From @BotFather. Format <code>123456789:AAH…</code> — no spaces. Hodhod verifies via Telegram getMe and sets the webhook automatically.</p>
     </label>
     <label class="form-field">
-      <span class="form-label">Approver Telegram ID <span class="text-slate-400 font-normal">(optional)</span></span>
+      <span class="form-label">{{T .Lang "bots.approver_id"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></span>
       <input name="approver_tg_id" class="form-input" placeholder="123456789">
-      <p class="form-hint">Numeric chat ID for payment/receipt notifications. Get yours from @userinfobot. Falls back to the agent's Telegram admin ID if empty.</p>
     </label>
-    <button type="submit" class="btn btn-primary">Add bot</button>
+    <button type="submit" class="btn btn-primary">{{T .Lang "bots.add"}}</button>
   </form>
 </div>
 {{end}}

@@ -150,6 +150,33 @@ func TestXUI_ListUsers(t *testing.T) {
 	})
 }
 
+func TestXUI_ListUsersPaged(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/panel/api/clients/list/paged") {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(xuiResp{
+			Success: true,
+			Obj: mustJSON(map[string]any{
+				"items": []map[string]any{
+					{"email": "a@test", "enable": true, "totalGB": float64(1e9), "inboundIds": []any{float64(1)}},
+				},
+				"total": 10, "filtered": 1, "page": 1, "pageSize": 25,
+			}),
+		})
+	}))
+	defer srv.Close()
+	c := newXUI(Config{BaseURL: srv.URL, APIToken: "tok"}, srv.Client())
+	page, err := c.ListUsersPaged(context.Background(), UserListOptions{Page: 1, PageSize: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Users) != 1 || page.Users[0].Username != "a@test" || page.Total != 10 {
+		t.Fatalf("page=%+v", page)
+	}
+}
+
 func TestXUI_Backup(t *testing.T) {
 	dbBytes := append([]byte("SQLite format 3\x00"), make([]byte, 32)...)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

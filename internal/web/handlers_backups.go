@@ -18,12 +18,15 @@ func (s *Server) pagePanelBackups(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	backups, _ := s.Store.ListPanelBackups(r.Context(), panelID, 50)
+	total, _ := s.Store.CountPanelBackups(r.Context(), panelID)
+	pag := paginationFromRequest(r, int(total))
+	backups, _ := s.Store.ListPanelBackupsPaginated(r.Context(), panelID, pag.PerPage, pag.Offset())
 	settings := s.panelBackupSettings(r, panelID)
 	client, _ := s.Panels.Get(r.Context(), panelID)
 	_, supportsBackup := client.(panels.Backuper)
 	s.renderPage(w, "panel_backups", r, map[string]any{
 		"Panel": panel, "Backups": backups, "Settings": settings, "SupportsBackup": supportsBackup,
+		"Pagination": pag,
 	})
 }
 

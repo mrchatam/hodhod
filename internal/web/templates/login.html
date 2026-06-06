@@ -1,26 +1,27 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="fa" dir="rtl" class="h-full" data-theme="system">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hodhod Login</title>
-  <style>
-    .btn{display:inline-flex;align-items:center;justify-content:center;font-weight:500;border-radius:0.5rem;cursor:pointer;border:1px solid transparent}
-    .btn-primary{background:#4f46e5;color:#fff;padding:0.625rem 1rem;width:100%;border-color:#4f46e5}
-    .btn-primary:hover{background:#4338ca}
-    .form-field{display:block}
-    .form-label{font-size:0.875rem;font-weight:500}
-    .form-input{margin-top:0.25rem;width:100%;border:1px solid #cbd5e1;border-radius:0.5rem;padding:0.625rem}
-  </style>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>{{if .Lang}}{{T .Lang "login.title"}}{{else}}ورود{{end}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script>(function(){if(window.matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark');})();</script>
 </head>
-<body class="h-full bg-slate-50 flex items-center justify-center">
-<form method="post" action="/login" class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200 w-full max-w-sm">
-  <h1 class="text-2xl font-bold text-brand-600 mb-1">Hodhod</h1>
-  <p class="text-sm text-slate-500 mb-6">Sales panel sign in</p>
-  {{if .Error}}<p class="text-red-600 text-sm mb-4">Invalid credentials</p>{{end}}
-  <label class="form-field mb-4">Username<input name="username" class="form-input" required autofocus></label>
-  <label class="form-field mb-6">Password<input name="password" type="password" class="form-input" required></label>
-  <button type="submit" class="btn btn-primary">Sign in</button>
-</form>
-</body></html>
+<body class="min-h-full flex items-center justify-center p-4">
+  <div class="card w-full max-w-md p-8">
+    <h1 class="text-2xl font-bold text-center text-brand-600 mb-6">{{if .Lang}}{{T .Lang "app.name"}}{{else}}هدهد{{end}}</h1>
+    {{if .Error}}<div class="alert-err mb-4">{{if .Lang}}{{T .Lang "login.error"}}{{else}}نام کاربری یا رمز اشتباه است{{end}}</div>{{end}}
+    <form method="post" action="/login" class="space-y-4">
+      <div class="form-field">
+        <label class="form-label">{{if .Lang}}{{T .Lang "login.username"}}{{else}}نام کاربری{{end}}</label>
+        <input type="text" name="username" class="form-input" required autofocus autocomplete="username">
+      </div>
+      <div class="form-field">
+        <label class="form-label">{{if .Lang}}{{T .Lang "login.password"}}{{else}}رمز عبور{{end}}</label>
+        <input type="password" name="password" class="form-input" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary w-full">{{if .Lang}}{{T .Lang "login.submit"}}{{else}}ورود{{end}}</button>
+    </form>
+  </div>
+</body>
+</html>

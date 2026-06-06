@@ -13,7 +13,11 @@ import (
 )
 
 func (s *Server) pageLogin(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"Error": r.URL.Query().Get("e") != ""}
+	lang := "fa"
+	if c, err := r.Cookie("hodhod_lang"); err == nil && (c.Value == "en" || c.Value == "fa") {
+		lang = c.Value
+	}
+	data := map[string]any{"Error": r.URL.Query().Get("e") != "", "Lang": lang, "IsRTL": lang == "fa"}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = s.loginT.Execute(w, data)
 }
@@ -129,15 +133,32 @@ func (s *Server) pagePendingPayments(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
 	var payments []db.Payment
 	var history []db.Payment
+	histPage, _ := strconv.Atoi(r.URL.Query().Get("hist_page"))
+	if histPage < 1 {
+		histPage = 1
+	}
+	histPerPage := 25
+	if v, _ := strconv.Atoi(r.URL.Query().Get("per_page")); validPerPage(v) {
+		histPerPage = v
+	}
+	var histTotal int64
 	if admin.Role == db.RoleMaster {
 		payments, _ = s.Store.ListAllPendingPayments(r.Context())
-		history, _ = s.Store.ListAllPayments(r.Context(), db.PaymentApproved)
+		histTotal, _ = s.Store.CountAllPayments(r.Context(), db.PaymentApproved)
+		history, _ = s.Store.ListAllPaymentsPaginated(r.Context(), db.PaymentApproved, histPerPage, (histPage-1)*histPerPage)
 	}
 	if admin.Role == db.RoleAgent && admin.AgentID != nil {
 		payments, _ = s.Store.ListPendingPaymentsByAgent(r.Context(), *admin.AgentID)
-		history, _ = s.Store.ListPaymentsByAgent(r.Context(), *admin.AgentID, db.PaymentApproved)
+		histTotal, _ = s.Store.CountPaymentsByAgent(r.Context(), *admin.AgentID, db.PaymentApproved)
+		history, _ = s.Store.ListPaymentsByAgentPaginated(r.Context(), *admin.AgentID, db.PaymentApproved, histPerPage, (histPage-1)*histPerPage)
 	}
-	s.renderPage(w, "payments", r, map[string]any{"Payments": payments, "History": history, "Currency": "Toman"})
+	histPag := Pagination{
+		Page: histPage, PerPage: histPerPage, Total: int(histTotal),
+		Base: r.URL.Path, PageParam: "hist_page",
+	}
+	s.renderPage(w, "payments", r, map[string]any{
+		"Payments": payments, "History": history, "Currency": "Toman", "HistPagination": histPag,
+	})
 }
 
 func (s *Server) getPaymentReceipt(w http.ResponseWriter, r *http.Request) {

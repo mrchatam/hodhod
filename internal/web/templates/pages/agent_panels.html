@@ -1,30 +1,53 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-2">My Panels</h2>
-<p class="text-sm text-slate-500 mb-6">Panels assigned to your account (read-only)</p>
-<div class="bg-white rounded-xl border overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500">
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <div>
+    <h2 class="text-2xl font-bold">{{T .Lang "agent_panels.title"}}</h2>
+    <p class="text-sm opacity-60 mt-1">{{T .Lang "agent_panels.subtitle"}}</p>
+  </div>
+</div>
+
+<div class="card desktop-table overflow-hidden">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{T .Lang "table.panel"}}</th>
+          <th>{{T .Lang "panels.type"}}</th>
+          <th>{{T .Lang "agent_panels.max_users"}}</th>
+          <th>{{T .Lang "agent_panels.expiry_cap"}}</th>
+          <th>{{T .Lang "agent_panels.in_use"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {{range .Rows}}
       <tr>
-        <th class="text-left p-3">Panel</th>
-        <th class="text-left p-3">Type</th>
-        <th class="text-left p-3">Max users</th>
-        <th class="text-left p-3">Expiry cap</th>
-        <th class="text-left p-3">In use</th>
+        <td class="font-medium">{{.Panel.Name}}</td>
+        <td>{{.Panel.Type}}</td>
+        <td>{{if .AgentPanel.MaxUsers}}{{.AgentPanel.MaxUsers}}{{else}}∞{{end}}</td>
+        <td>{{if .AgentPanel.ExpiryCapDays}}{{.AgentPanel.ExpiryCapDays}}d{{else}}—{{end}}</td>
+        <td>{{.Usage}}</td>
       </tr>
-    </thead>
-    <tbody>
-    {{range .Rows}}
-    <tr class="border-t border-slate-100">
-      <td class="p-3 font-medium">{{.Panel.Name}}</td>
-      <td class="p-3">{{.Panel.Type}}</td>
-      <td class="p-3">{{if .AgentPanel.MaxUsers}}{{.AgentPanel.MaxUsers}}{{else}}∞{{end}}</td>
-      <td class="p-3">{{if .AgentPanel.ExpiryCapDays}}{{.AgentPanel.ExpiryCapDays}}d{{else}}—{{end}}</td>
-      <td class="p-3">{{.Usage}}</td>
-    </tr>
-    {{else}}
-    <tr><td colspan="5" class="p-8 text-center text-slate-400">No panels assigned yet.</td></tr>
-    {{end}}
-    </tbody>
-  </table>
+      {{else}}
+      <tr><td colspan="5" class="text-center py-10 opacity-60">{{T $.Lang "agent_panels.empty"}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="space-y-3 md:hidden mt-3">
+  {{range .Rows}}
+  <div class="mobile-card">
+    <p class="font-medium">{{.Panel.Name}}</p>
+    <p class="text-sm opacity-60">{{.Panel.Type}}</p>
+    <div class="grid grid-cols-2 gap-2 text-sm mt-2">
+      <div><span class="text-xs opacity-60">{{T $.Lang "agent_panels.max_users"}}</span><p>{{if .AgentPanel.MaxUsers}}{{.AgentPanel.MaxUsers}}{{else}}∞{{end}}</p></div>
+      <div><span class="text-xs opacity-60">{{T $.Lang "agent_panels.expiry_cap"}}</span><p>{{if .AgentPanel.ExpiryCapDays}}{{.AgentPanel.ExpiryCapDays}}d{{else}}—{{end}}</p></div>
+      <div class="col-span-2"><span class="text-xs opacity-60">{{T $.Lang "agent_panels.in_use"}}</span><p>{{.Usage}}</p></div>
+    </div>
+  </div>
+  {{else}}
+  <div class="card p-10 text-center opacity-60">{{T .Lang "agent_panels.empty"}}</div>
+  {{end}}
 </div>
 {{end}}

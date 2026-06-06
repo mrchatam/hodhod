@@ -1,11 +1,14 @@
 package web
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/mrchatam/hodhod/internal/db"
+	"github.com/mrchatam/hodhod/internal/i18n"
+	"github.com/mrchatam/hodhod/internal/sales"
 )
 
 func (s *Server) baseData(r *http.Request) map[string]any {
@@ -13,16 +16,23 @@ func (s *Server) baseData(r *http.Request) map[string]any {
 	perms, _ := s.permsFor(r, admin)
 	lang, _ := s.Store.GetSetting(r.Context(), "admin", admin.ID, "lang")
 	if lang == "" {
-		lang = "en"
+		lang = "fa"
 	}
+	theme, _ := s.Store.GetSetting(r.Context(), "admin", admin.ID, "theme")
+	if theme == "" {
+		theme = "system"
+	}
+	path := r.URL.Path
 	return map[string]any{
-		"Admin":    admin,
-		"CSRF":     r.Context().Value(ctxCSRF),
-		"Perms":    perms,
-		"Flash":    s.popFlash(r),
-		"IsMaster": admin.Role == db.RoleMaster,
-		"Lang":     lang,
-		"IsRTL":    lang == "fa",
+		"Admin":       admin,
+		"CSRF":        r.Context().Value(ctxCSRF),
+		"Perms":       perms,
+		"Flash":       s.popFlash(r),
+		"IsMaster":    admin.Role == db.RoleMaster,
+		"Lang":        lang,
+		"IsRTL":       lang == "fa",
+		"Theme":       theme,
+		"CurrentPath": path,
 	}
 }
 
@@ -54,11 +64,11 @@ func (s *Server) renderPartial(w http.ResponseWriter, page, partial string, data
 	}
 }
 
-func panelTestMessage(err error) (ok bool, msg string) {
+func panelTestMessage(lang string, err error) (ok bool, msg string) {
 	if err == nil {
-		return true, "Connection OK — panel credentials accepted."
+		return true, i18n.Admin(lang, "panels.test_ok")
 	}
-	return false, "Connection failed — check URL, path, username, and password."
+	return false, i18n.Admin(lang, "panels.test_fail")
 }
 
 func (s *Server) permsFor(r *http.Request, admin *db.Admin) (*db.AgentPermissions, error) {
@@ -143,5 +153,28 @@ func (s *Server) canPerm(r *http.Request, admin *db.Admin, perm db.Perm) bool {
 	if err != nil {
 		return false
 	}
-	return p.Has(perm)
+	if p.ViewOnly && perm != "" {
+		return false
+	}
+	return perm == "" || p.Has(perm)
+}
+
+func friendlySalesErr(lang string, err error) string {
+	if err == nil {
+		return i18n.Admin(lang, "flash.error")
+	}
+	switch {
+	case errors.Is(err, sales.ErrViewOnly):
+		return i18n.Admin(lang, "err.view_only")
+	case errors.Is(err, sales.ErrPermDenied):
+		return i18n.Admin(lang, "err.perm_denied")
+	case errors.Is(err, sales.ErrPanelNotAssigned):
+		return i18n.Admin(lang, "err.panel_not_assigned")
+	case errors.Is(err, sales.ErrNoCreateInbound):
+		return i18n.Admin(lang, "err.no_create_inbound")
+	case errors.Is(err, sales.ErrQuotaExceeded):
+		return i18n.Admin(lang, "err.quota_exceeded")
+	default:
+		return err.Error()
+	}
 }

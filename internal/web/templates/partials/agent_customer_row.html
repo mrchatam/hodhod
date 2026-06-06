@@ -1,0 +1,49 @@
+{{define "agent_customer_row"}}
+<tr id="pu-row-{{.Row.Username}}" class="cursor-pointer" onclick="document.getElementById('drawer-{{.Row.Username}}').classList.toggle('hidden')">
+  <td><p class="font-mono text-xs">{{.Row.Username}}</p>{{if .Row.Label}}<p class="text-xs opacity-60">{{.Row.Label}}</p>{{end}}</td>
+  <td>
+    <div class="usage-bar"><div class="usage-bar-fill" style="width:{{usagePct .Row.UsedBytes .Row.DataLimitBytes}}%"></div></div>
+    <p class="text-xs opacity-60">{{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</p>
+  </td>
+  <td>{{time .Row.ExpireAt}}</td>
+  <td>{{template "panel_user_status_badge" .Row}}</td>
+  <td class="text-end" onclick="event.stopPropagation()">
+    {{if .Row.SubLink}}<button type="button" class="btn btn-muted btn-sm" onclick="navigator.clipboard.writeText('{{.Row.SubLink}}')">{{T .Lang "users.copy_sub"}}</button>{{end}}
+    {{if .Row.CanModify}}{{template "agent_customer_actions" .}}{{end}}
+  </td>
+</tr>
+<tr id="drawer-{{.Row.Username}}" class="hidden">
+  <td colspan="5" class="bg-[var(--color-surface-2)] p-4">
+    <p class="text-sm font-semibold mb-2">{{T .Lang "users.detail"}}</p>
+    <p class="text-xs opacity-60">{{T .Lang "services.usage"}}: {{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</p>
+    <p class="text-xs opacity-60">{{T .Lang "services.expires"}}: {{time .Row.ExpireAt}}</p>
+    {{if .Row.SubLink}}<p class="text-xs mt-2 break-all"><a href="{{.Row.SubLink}}" target="_blank" rel="noopener">{{.Row.SubLink}}</a></p>{{end}}
+  </td>
+</tr>
+{{end}}
+
+{{define "agent_customer_actions"}}
+<div class="action-menu inline" data-action-menu>
+  <button type="button" class="btn btn-muted btn-sm" data-action-menu-btn>{{T $.Lang "common.more"}}</button>
+  <div class="action-menu-panel hidden" data-action-menu-panel>
+    <details class="px-3 py-2">
+      <summary class="cursor-pointer text-sm">{{T $.Lang "common.modify"}}</summary>
+      <form class="mt-2 space-y-1" hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/modify" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+        <input name="volume_gb" type="number" placeholder="GB" class="form-input text-xs py-1">
+        <input name="duration_days" type="number" placeholder="days" class="form-input text-xs py-1">
+        <button type="submit" class="btn btn-secondary btn-sm w-full">{{T $.Lang "users.save_limits"}}</button>
+      </form>
+    </details>
+    <form hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/reset" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML" hx-confirm="{{T $.Lang "users.reset_usage_hint"}}">
+      <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+      <button type="submit" class="w-full">{{T $.Lang "users.reset_usage"}}</button>
+    </form>
+    {{if .Row.Enabled}}
+    <form hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/disable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.disable"}}</button></form>
+    {{else}}
+    <form hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/enable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.enable"}}</button></form>
+    {{end}}
+  </div>
+</div>
+{{end}}

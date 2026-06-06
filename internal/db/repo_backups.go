@@ -9,10 +9,19 @@ func (s *Store) CreatePanelBackup(ctx context.Context, b *PanelBackup) error {
 }
 
 func (s *Store) ListPanelBackups(ctx context.Context, panelID int64, limit int) ([]PanelBackup, error) {
+	return s.ListPanelBackupsPaginated(ctx, panelID, limit, 0)
+}
+
+func (s *Store) CountPanelBackups(ctx context.Context, panelID int64) (int64, error) {
+	var n int64
+	return n, s.DB.WithContext(ctx).Model(&PanelBackup{}).Where("panel_id = ?", panelID).Count(&n).Error
+}
+
+func (s *Store) ListPanelBackupsPaginated(ctx context.Context, panelID int64, limit, offset int) ([]PanelBackup, error) {
 	var out []PanelBackup
 	q := s.DB.WithContext(ctx).Where("panel_id = ?", panelID).Order("created_at DESC")
 	if limit > 0 {
-		q = q.Limit(limit)
+		q = q.Limit(limit).Offset(offset)
 	}
 	return out, q.Find(&out).Error
 }

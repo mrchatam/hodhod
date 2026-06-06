@@ -15,14 +15,29 @@ import (
 
 func (s *Server) pageServices(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	if admin.Role == db.RoleAgent {
+		s.pageCustomers(w, r)
+		return
+	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	panelID, _ := strconv.ParseInt(r.URL.Query().Get("panel_id"), 10, 64)
+	pag := paginationFromRequest(r, 0, "q", "status", "panel_id")
+	var total int64
 	var svcs []db.Service
 	var err error
 	if admin.Role == db.RoleMaster {
-		svcs, err = s.Store.ListAllServicesFiltered(r.Context(), q, status)
+		total, err = s.Store.CountAllServicesFiltered(r.Context(), q, status, panelID)
+		if err == nil {
+			pag.Total = int(total)
+			svcs, err = s.Store.ListAllServicesFilteredForPanel(r.Context(), q, status, panelID, pag.PerPage, pag.Offset())
+		}
 	} else if admin.AgentID != nil {
-		svcs, err = s.Store.ListServicesByAgentFiltered(r.Context(), *admin.AgentID, q, status)
+		total, err = s.Store.CountServicesByAgentFiltered(r.Context(), *admin.AgentID, q, status, panelID)
+		if err == nil {
+			pag.Total = int(total)
+			svcs, err = s.Store.ListServicesByAgentFilteredForPanel(r.Context(), *admin.AgentID, q, status, panelID, pag.PerPage, pag.Offset())
+		}
 	}
 	if err != nil {
 		http.Error(w, "error", http.StatusInternalServerError)
@@ -30,11 +45,16 @@ func (s *Server) pageServices(w http.ResponseWriter, r *http.Request) {
 	}
 	s.renderPage(w, "services", r, map[string]any{
 		"Services": svcs, "Query": q, "StatusFilter": status,
+		"PanelID": panelID, "Pagination": pag,
 	})
 }
 
 func (s *Server) pageServiceCreate(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	if admin.Role == db.RoleAgent {
+		s.pageCustomerCreate(w, r)
+		return
+	}
 	if !s.canPerm(r, admin, db.PermCreateUser) && admin.Role != db.RoleMaster {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
@@ -52,6 +72,14 @@ func (s *Server) pageServiceCreate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) postService(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	lang, _ := s.Store.GetSetting(r.Context(), "admin", admin.ID, "lang")
+	if lang == "" {
+		lang = "fa"
+	}
+	if !s.canPerm(r, admin, db.PermCreateUser) && admin.Role != db.RoleMaster {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	_ = r.ParseForm()
 	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
 	vol, _ := strconv.Atoi(r.FormValue("volume_gb"))
@@ -75,13 +103,21 @@ func (s *Server) postService(w http.ResponseWriter, r *http.Request) {
 		VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: isMaster,
 	})
 	if err != nil {
-		s.setFlash(w, "err", err.Error())
-		http.Redirect(w, r, "/services/new", http.StatusSeeOther)
+		s.setFlash(w, "err", friendlySalesErr(lang, err))
+		redirect := "/services/new"
+		if admin.Role == db.RoleAgent {
+			redirect = "/customers/new"
+		}
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
 		return
 	}
 	s.audit(r, &admin.ID, "create_service", "service", svc.ID, map[string]any{"agent_id": agentID})
 	s.setFlash(w, "ok", "Service created")
-	http.Redirect(w, r, "/services", http.StatusSeeOther)
+	redirect := "/services"
+	if admin.Role == db.RoleAgent {
+		redirect = "/customers"
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 func (s *Server) salesAgentID(admin *db.Admin) (int64, bool) {
@@ -142,11 +178,8 @@ func (s *Server) renderServiceRow(w http.ResponseWriter, r *http.Request, servic
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	perms, _ := s.permsFor(r, admin)
-	data := map[string]any{
-		"Admin": admin, "CSRF": r.Context().Value(ctxCSRF), "Perms": perms,
-		"IsMaster": isMaster, "Svc": svc,
-	}
+	data := s.baseData(r)
+	data["Svc"] = svc
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	t, ok := s.pages["services"]
 	if !ok {

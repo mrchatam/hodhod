@@ -1,28 +1,101 @@
-{{define "service_row"}}
-<tr id="svc-row-{{.Svc.ID}}" class="border-t border-slate-100 hover:bg-slate-50">
-  <td class="p-3">{{if .Svc.Label}}{{.Svc.Label}}{{else}}—{{end}}</td>
-  <td class="p-3 font-mono text-xs">{{.Svc.PanelUsername}}</td>
-  <td class="p-3">{{gib .Svc.UsedBytes}} / {{gib .Svc.DataLimitBytes}}</td>
-  <td class="p-3">{{date .Svc.ExpireAt}}</td>
-  <td class="p-3"><span class="badge {{if eq .Svc.Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{.Svc.Status}}</span></td>
-  <td class="p-3 text-right">
-    <div class="flex flex-wrap justify-end gap-1">
+{{define "service_usage"}}
+<div class="usage-bar" title="{{gib .UsedBytes}} / {{gib .DataLimitBytes}}">
+  <div class="usage-bar-fill" style="width:{{usagePct .UsedBytes .DataLimitBytes}}%"></div>
+</div>
+<p class="text-xs opacity-60 mt-0.5">{{gib .UsedBytes}} / {{gib .DataLimitBytes}}</p>
+{{end}}
+
+{{define "service_actions"}}
+<div class="action-menu" data-action-menu>
+  <button type="button" class="btn btn-muted btn-sm" data-action-menu-btn aria-label="{{T $.Lang "common.actions"}}">{{T $.Lang "common.more"}}</button>
+  <div class="action-menu-panel hidden" data-action-menu-panel>
     {{if $.Perms.ModifyUser}}
-    <form class="inline flex flex-wrap gap-1 items-center" method="post" action="/services/{{.Svc.ID}}/modify">
+    <form method="post" action="/services/{{.Svc.ID}}/modify" class="px-3 py-2 space-y-1 border-b border-[var(--color-border)]">
       <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-      <input name="volume_gb" type="number" placeholder="GB" class="form-input w-16 text-xs py-1">
+      <input name="volume_gb" type="number" placeholder="GB" class="form-input text-xs py-1">
       <input name="expire_at" type="date" class="form-input text-xs py-1">
-      <button type="submit" class="btn btn-secondary btn-sm">Set</button>
+      <button type="submit" class="btn btn-secondary btn-sm w-full">{{T $.Lang "services.set"}}</button>
     </form>
     {{end}}
-    {{if $.Perms.AddTime}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button type="submit" class="btn btn-secondary btn-sm">+30d</button></form>{{end}}
-    {{if $.Perms.AddVolume}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button type="submit" class="btn btn-secondary btn-sm">+10GB</button></form>{{end}}
-    {{if $.Perms.DisableEnable}}{{if eq .Svc.Status "active"}}<form class="inline" hx-post="/services/{{.Svc.ID}}/disable" hx-target="#svc-row-{{.Svc.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-warning btn-sm">Disable</button></form>{{else}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/enable"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Enable</button></form>{{end}}{{end}}
-    {{if $.Perms.ResetUsage}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-muted btn-sm">Reset</button></form>{{end}}
-    {{if $.Perms.DeleteUser}}<form class="inline" method="post" action="/services/{{.Svc.ID}}/delete" onsubmit="return confirm('Delete?')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form>{{end}}
-    <button type="button" class="btn btn-muted btn-sm" onclick="navigator.clipboard.writeText('{{.Svc.SubLink}}')">Copy</button>
-    <button type="button" class="btn btn-muted btn-sm qr-btn" data-sub="{{.Svc.SubLink}}">QR</button>
+    {{if $.Perms.AddTime}}
+    <form method="post" action="/services/{{.Svc.ID}}/add-time"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="days" value="30"><button type="submit" class="w-full">{{T $.Lang "services.add_time"}}</button></form>
+    {{end}}
+    {{if $.Perms.AddVolume}}
+    <form method="post" action="/services/{{.Svc.ID}}/add-volume"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="gb" value="10"><button type="submit" class="w-full">{{T $.Lang "services.add_volume"}}</button></form>
+    {{end}}
+    {{if $.Perms.DisableEnable}}
+    {{if eq .Svc.Status "active"}}
+    <form hx-post="/services/{{.Svc.ID}}/disable" hx-target="#svc-row-{{.Svc.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.disable"}}</button></form>
+    {{else}}
+    <form hx-post="/services/{{.Svc.ID}}/enable" hx-target="#svc-row-{{.Svc.ID}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.enable"}}</button></form>
+    {{end}}
+    {{end}}
+    {{if $.Perms.ResetUsage}}
+    <form method="post" action="/services/{{.Svc.ID}}/reset"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.reset"}}</button></form>
+    {{end}}
+    {{if $.Perms.DeleteUser}}
+    <form method="post" action="/services/{{.Svc.ID}}/delete" onsubmit="return confirm('{{T $.Lang "confirm.delete"}}')"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full text-[var(--color-danger)]">{{T $.Lang "common.delete"}}</button></form>
+    {{end}}
+    <button type="button" class="w-full qr-btn" data-sub="{{.Svc.SubLink}}">{{T $.Lang "services.qr"}}</button>
+    <button type="button" class="w-full" onclick="navigator.clipboard.writeText('{{.Svc.SubLink}}')">{{T $.Lang "common.copy"}}</button>
+  </div>
+</div>
+{{end}}
+
+{{define "service_status_badge"}}
+<span class="badge {{if eq .Status "active"}}badge-active{{else if eq .Status "expired"}}badge-expired{{else}}badge-disabled{{end}}">{{if eq .Status "active"}}{{T $.Lang "status.active"}}{{else if eq .Status "expired"}}{{T $.Lang "status.expired"}}{{else if eq .Status "disabled"}}{{T $.Lang "status.disabled"}}{{else}}{{.Status}}{{end}}</span>
+{{end}}
+
+{{define "service_card"}}
+<div id="svc-card-{{.Svc.ID}}" class="mobile-card">
+  <div class="flex items-start justify-between gap-2">
+    <div class="min-w-0">
+      <p class="font-medium truncate">{{if .Svc.Label}}{{.Svc.Label}}{{else}}—{{end}}</p>
+      <p class="font-mono text-xs opacity-60 mt-0.5">{{.Svc.PanelUsername}}</p>
     </div>
-  </td>
+    {{template "service_status_badge" .Svc}}
+  </div>
+  <div>
+    <p class="text-xs opacity-60 mb-1">{{T $.Lang "services.usage"}}</p>
+    {{template "service_usage" .Svc}}
+  </div>
+  <div class="flex justify-between text-sm">
+    <span class="opacity-60">{{T $.Lang "services.expires"}}</span>
+    <span>{{date .Svc.ExpireAt}}</span>
+  </div>
+  <div class="flex justify-end pt-1">{{template "service_actions" .}}</div>
+</div>
+{{end}}
+
+{{define "service_row_tr"}}
+<tr id="svc-row-{{.Svc.ID}}">
+  <td>{{if .Svc.Label}}{{.Svc.Label}}{{else}}—{{end}}</td>
+  <td class="font-mono text-xs">{{.Svc.PanelUsername}}</td>
+  <td class="min-w-[8rem]">{{template "service_usage" .Svc}}</td>
+  <td class="whitespace-nowrap">{{date .Svc.ExpireAt}}</td>
+  <td>{{template "service_status_badge" .Svc}}</td>
+  <td class="text-end">{{template "service_actions" .}}</td>
 </tr>
+{{end}}
+
+{{define "service_row"}}
+{{template "service_row_tr" .}}
+<div id="svc-card-{{.Svc.ID}}" class="mobile-card md:hidden" hx-swap-oob="true">
+  <div class="flex items-start justify-between gap-2">
+    <div class="min-w-0">
+      <p class="font-medium truncate">{{if .Svc.Label}}{{.Svc.Label}}{{else}}—{{end}}</p>
+      <p class="font-mono text-xs opacity-60 mt-0.5">{{.Svc.PanelUsername}}</p>
+    </div>
+    {{template "service_status_badge" .Svc}}
+  </div>
+  <div>
+    <p class="text-xs opacity-60 mb-1">{{T $.Lang "services.usage"}}</p>
+    {{template "service_usage" .Svc}}
+  </div>
+  <div class="flex justify-between text-sm">
+    <span class="opacity-60">{{T $.Lang "services.expires"}}</span>
+    <span>{{date .Svc.ExpireAt}}</span>
+  </div>
+  <div class="flex justify-end pt-1">{{template "service_actions" .}}</div>
+</div>
 {{end}}

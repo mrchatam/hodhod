@@ -327,6 +327,153 @@ func (c *xuiClient) ListUsers(ctx context.Context) ([]UserInfo, error) {
 	return c.listUsersViaInbounds(ctx)
 }
 
+func (c *xuiClient) ListUsersPaged(ctx context.Context, opts UserListOptions) (*UserListPage, error) {
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := opts.PageSize
+	if pageSize < 1 {
+		pageSize = 25
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	filter := ""
+	switch opts.Status {
+	case "disabled":
+		filter = "deactive"
+	case "expired":
+		filter = "depleted"
+	case "active":
+		filter = "active"
+	}
+	q := url.Values{}
+	q.Set("page", fmt.Sprintf("%d", page))
+	q.Set("pageSize", fmt.Sprintf("%d", pageSize))
+	q.Set("search", opts.Search)
+	q.Set("filter", filter)
+	q.Set("protocol", "")
+	q.Set("sort", "expiryTime")
+	q.Set("order", "descend")
+	path := "/panel/api/clients/list/paged?" + q.Encode()
+	var obj struct {
+		Items    []map[string]any `json:"items"`
+		Total    int              `json:"total"`
+		Filtered int              `json:"filtered"`
+		Page     int              `json:"page"`
+		PageSize int              `json:"pageSize"`
+	}
+	if err := c.do(ctx, http.MethodGet, path, nil, &obj); err != nil {
+		// Fallback: load all and slice in memory.
+		all, err2 := c.ListUsers(ctx)
+		if err2 != nil {
+			return nil, err
+		}
+		return sliceUserListPage(all, opts), nil
+	}
+	users := make([]UserInfo, 0, len(obj.Items))
+	for _, cl := range obj.Items {
+		u := xuiMapClientRow(cl)
+		if u.Username != "" {
+			users = append(users, u)
+		}
+	}
+	return &UserListPage{
+		Users: users, Total: obj.Total, Filtered: obj.Filtered,
+		Page: obj.Page, PageSize: obj.PageSize,
+	}, nil
+}
+
+func xuiMapClientRow(cl map[string]any) UserInfo {
+	u := UserInfo{Enabled: true, Raw: cl}
+	if v, ok := cl["email"].(string); ok {
+		u.Username = v
+	}
+	if v, ok := cl["enable"].(bool); ok {
+		u.Enabled = v
+	}
+	if v, ok := cl["totalGB"].(float64); ok {
+		u.DataLimitBytes = int64(v)
+	}
+	if v, ok := cl["expiryTime"].(float64); ok && v > 0 {
+		u.ExpireAt = time.UnixMilli(int64(v))
+	}
+	if v, ok := cl["limitIp"].(float64); ok {
+		u.LimitIP = int(v)
+	}
+	if v, ok := cl["comment"].(string); ok {
+		u.Note = v
+	}
+	u.InboundIDs = xuiParseIntSlice(cl["inboundIds"])
+	if len(u.InboundIDs) > 0 {
+		u.InboundID = u.InboundIDs[0]
+	}
+	if tr, ok := cl["traffic"].(map[string]any); ok {
+		if v, ok := tr["up"].(float64); ok {
+			u.UsedBytes += int64(v)
+		}
+		if v, ok := tr["down"].(float64); ok {
+			u.UsedBytes += int64(v)
+		}
+	}
+	return u
+}
+
+func sliceUserListPage(all []UserInfo, opts UserListOptions) *UserListPage {
+	filtered := filterUsersInMemory(all, opts)
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := opts.PageSize
+	if pageSize < 1 {
+		pageSize = 25
+	}
+	total := len(filtered)
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	return &UserListPage{
+		Users: filtered[start:end], Total: total, Filtered: total,
+		Page: page, PageSize: pageSize,
+	}
+}
+
+func filterUsersInMemory(users []UserInfo, opts UserListOptions) []UserInfo {
+	q := strings.ToLower(strings.TrimSpace(opts.Search))
+	var out []UserInfo
+	for _, u := range users {
+		if q != "" && !strings.Contains(strings.ToLower(u.Username), q) && !strings.Contains(strings.ToLower(u.Note), q) {
+			continue
+		}
+		switch opts.Status {
+		case "disabled":
+			if u.Enabled {
+				continue
+			}
+		case "active":
+			if !u.Enabled {
+				continue
+			}
+			if !u.ExpireAt.IsZero() && u.ExpireAt.Before(time.Now()) {
+				continue
+			}
+		case "expired":
+			if u.ExpireAt.IsZero() || !u.ExpireAt.Before(time.Now()) {
+				continue
+			}
+		}
+		out = append(out, u)
+	}
+	return out
+}
+
 func (c *xuiClient) listUsersViaClientsAPI(ctx context.Context) ([]UserInfo, error) {
 	var raw []map[string]any
 	if err := c.do(ctx, http.MethodGet, "/panel/api/clients/list", nil, &raw); err != nil {

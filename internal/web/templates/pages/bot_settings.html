@@ -1,62 +1,70 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-2">Bot @{{.Bot.Username}}</h2>
-<p class="text-sm text-slate-500 mb-2">Webhook (main domain): {{.WebhookURL}} · {{.WebhookStatus}}</p>
-{{if .AgentPublicURL}}<p class="text-sm text-slate-500 mb-4">Seller panel: {{.AgentPublicURL}}/login · Mini App: {{.AgentPublicURL}}/miniapp/index.html?bot={{.Bot.PublicID}}</p>{{end}}
-<form method="post" action="/master/bots/{{.Bot.ID}}/settings" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg">
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+  <div>
+    <h2 class="text-2xl font-bold">@{{.Bot.Username}}</h2>
+    <p class="text-sm opacity-60 mt-1">{{T .Lang "bot_settings.webhook"}}: {{.WebhookURL}} · {{.WebhookStatus}}</p>
+    {{if .AgentPublicURL}}<p class="text-sm opacity-60">{{T .Lang "bot_settings.seller_panel"}}: {{.AgentPublicURL}}/login · {{T .Lang "bot_settings.miniapp"}}: {{.AgentPublicURL}}/miniapp/index.html?bot={{.Bot.PublicID}}</p>{{end}}
+  </div>
+  <a href="/master/bots" class="btn btn-muted btn-sm">{{T .Lang "common.back"}}</a>
+</div>
+
+<form method="post" action="/master/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
   <label class="form-field">
-    <span class="form-label">New bot token</span>
-    <input name="token" type="password" class="form-input" placeholder="Leave empty to keep current">
-    <p class="form-hint">Paste a new token from @BotFather only when rotating the bot token.</p>
+    <span class="form-label">{{T .Lang "bot_settings.new_token"}}</span>
+    <input name="token" type="password" class="form-input" placeholder="{{T .Lang "panel_edit.keep_current"}}">
   </label>
   <label class="form-field">
-    <span class="form-label">Status</span>
-    <select name="status" class="form-input"><option value="active" {{if eq .Bot.Status "active"}}selected{{end}}>active</option><option value="disabled">disabled</option></select>
+    <span class="form-label">{{T .Lang "common.status"}}</span>
+    <select name="status" class="form-select">
+      <option value="active" {{if eq .Bot.Status "active"}}selected{{end}}>{{T .Lang "status.active"}}</option>
+      <option value="disabled">{{T .Lang "status.disabled"}}</option>
+    </select>
   </label>
   <label class="form-field">
-    <span class="form-label">Approver Telegram ID</span>
+    <span class="form-label">{{T .Lang "bots.approver_id"}}</span>
     <input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123456789">
-    <p class="form-hint">Who receives payment approval requests. Get ID from @userinfobot. Overrides agent-level admin ID for this bot.</p>
   </label>
   <label class="form-field">
-    <span class="form-label">Support contact</span>
-    <input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input" placeholder="@support or t.me/...">
+    <span class="form-label">{{T .Lang "bot_settings.support_contact"}}</span>
+    <input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input" placeholder="@support">
   </label>
   <label class="form-field">
-    <span class="form-label">Welcome message</span>
-    <textarea name="welcome_text" class="form-input" rows="2">{{index .Settings "welcome_text"}}</textarea>
+    <span class="form-label">{{T .Lang "bot_settings.welcome_message"}}</span>
+    <textarea name="welcome_text" class="form-textarea" rows="2">{{index .Settings "welcome_text"}}</textarea>
   </label>
   <label class="form-field">
-    <span class="form-label">Payment card numbers</span>
-    <textarea name="card_numbers" class="form-input" rows="2">{{index .Settings "card_numbers"}}</textarea>
+    <span class="form-label">{{T .Lang "bot_settings.card_numbers"}}</span>
+    <textarea name="card_numbers" class="form-textarea" rows="2">{{index .Settings "card_numbers"}}</textarea>
   </label>
   <label class="form-field">
-    <span class="form-label">Usage warn %</span>
+    <span class="form-label">{{T .Lang "bot_settings.warn_percent"}}</span>
     <input name="warn_percent" value="{{index .Settings "warn_percent"}}" class="form-input" placeholder="80">
   </label>
   <label class="form-field">
-    <span class="form-label">Force-join channel</span>
+    <span class="form-label">{{T .Lang "bot_settings.force_join"}}</span>
     <input name="force_join_channel" value="{{index .Settings "force_join_channel"}}" class="form-input" placeholder="@yourchannel">
   </label>
   <label class="form-field">
-    <span class="form-label">Currency label</span>
+    <span class="form-label">{{T .Lang "bot_settings.currency"}}</span>
     <input name="currency" value="{{index .Settings "currency"}}" class="form-input" placeholder="Toman">
   </label>
-  <button type="submit" class="btn btn-primary">Save bot settings</button>
+  <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
-<h3 class="text-lg font-semibold mt-8 mb-3">Panel assignment</h3>
-<ul class="text-sm space-y-1 mb-4">{{range .BotPanels}}<li class="bg-slate-50 p-2 rounded">Panel {{.PanelID}} · inbounds in scope</li>{{else}}<li class="text-slate-400">No panels assigned to this bot.</li>{{end}}</ul>
-<form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg">
+
+<h3 class="text-lg font-semibold mt-8 mb-3">{{T .Lang "bot_settings.panel_assignment"}}</h3>
+<ul class="text-sm space-y-2 mb-4">{{range .BotPanels}}<li class="card p-2">{{T $.Lang "table.panel"}} {{.PanelID}}</li>{{else}}<li class="opacity-60">{{T .Lang "bot_settings.no_panels"}}</li>{{end}}</ul>
+<form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
   <label class="form-field">
-    <span class="form-label">Panel</span>
-    <select name="panel_id" class="form-input">{{range .AgentPanels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+    <span class="form-label">{{T .Lang "table.panel"}}</span>
+    <select name="panel_id" class="form-select">{{range .AgentPanels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
   </label>
   <label class="form-field">
-    <span class="form-label">Inbound IDs</span>
+    <span class="form-label">{{T .Lang "agent_edit.inbound_ids"}}</span>
     <input name="inbound_ids" class="form-input" placeholder="1, 2, 3">
-    <p class="form-hint">Comma-separated inbound IDs (3x-ui). Leave empty for all inbounds on the panel.</p>
+    <p class="form-hint">{{T .Lang "agent_edit.inbound_hint"}}</p>
   </label>
-  <button type="submit" class="btn btn-primary">Assign panel</button>
+  <button type="submit" class="btn btn-primary">{{T .Lang "bot_settings.assign_panel"}}</button>
 </form>
 {{end}}

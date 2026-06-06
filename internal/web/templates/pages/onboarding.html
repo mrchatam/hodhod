@@ -1,9 +1,40 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">Getting started</h2>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "onboarding.title"}}</h2>
+</div>
+
 <ol class="space-y-4 max-w-xl">
-  <li class="flex gap-3 bg-white p-4 rounded-xl border border-slate-200"><span class="font-bold text-brand-600">1</span><div><p class="font-medium">Add a VPN panel</p><p class="text-sm text-slate-500">Master: connect Marzban or 3x-ui. Panels work for manual user creation without a bot.</p>{{if .IsMaster}}<a href="/master/panels" class="btn btn-link btn-sm">Go to Panels →</a>{{end}}</div></li>
-  <li class="flex gap-3 bg-white p-4 rounded-xl border border-slate-200"><span class="font-bold text-brand-600">2</span><div><p class="font-medium">Create an agent (seller)</p><p class="text-sm text-slate-500">Assign panels, permissions, and login</p>{{if .IsMaster}}<a href="/master/agents" class="btn btn-link btn-sm">Go to Agents →</a>{{end}}</div></li>
-  <li class="flex gap-3 bg-white p-4 rounded-xl border border-slate-200"><span class="font-bold text-brand-600">3</span><div><p class="font-medium">Add a Telegram bot <span class="text-slate-400 font-normal">(optional)</span></p><p class="text-sm text-slate-500">Only needed for automated sales via Telegram. Manual services work with panel + agent alone.</p><a href="{{if .IsMaster}}/master/bots{{else}}/agent/bots{{end}}" class="btn btn-link btn-sm">Go to Bots →</a></div></li>
-  <li class="flex gap-3 bg-white p-4 rounded-xl border border-slate-200"><span class="font-bold text-brand-600">4</span><div><p class="font-medium">Create services</p><p class="text-sm text-slate-500">Manually in panel or via bot sales</p><a href="/services" class="btn btn-link btn-sm">Go to Services →</a></div></li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">1</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step1"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step1_desc"}}</p>
+      {{if .IsMaster}}<a href="/master/panels" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_panels"}} →</a>{{end}}
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">2</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step2_title"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step2_desc"}}</p>
+      {{if .IsMaster}}<a href="/master/agents" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_agents"}} →</a>{{end}}
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">3</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step3_title"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step3_desc"}}</p>
+      <a href="{{if .IsMaster}}/master/bots{{else}}/agent/bots{{end}}" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_bots"}} →</a>
+    </div>
+  </li>
+  <li class="card p-4 flex gap-3">
+    <span class="font-bold text-brand-600 shrink-0">4</span>
+    <div class="min-w-0">
+      <p class="font-medium">{{T .Lang "onboarding.step4_title"}}</p>
+      <p class="text-sm opacity-60 mt-1">{{T .Lang "onboarding.step4_desc"}}</p>
+      <a href="/services" class="btn btn-link btn-sm mt-2">{{T .Lang "onboarding.go_services"}} →</a>
+    </div>
+  </li>
 </ol>
 {{end}}

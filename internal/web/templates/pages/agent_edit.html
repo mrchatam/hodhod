@@ -1,102 +1,185 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-2">{{.Agent.Name}}</h2>
-<p class="text-sm text-slate-500 mb-6">Agent settings, permissions, and panel assignment</p>
-<div class="grid lg:grid-cols-2 gap-6">
-  <form method="post" action="/master/agents/{{.Agent.ID}}" class="bg-white rounded-xl border p-6 space-y-4">
-    <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <label class="form-field">
-      <span class="form-label">Name</span>
-      <input name="name" value="{{.Agent.Name}}" class="form-input" required>
-    </label>
-    <label class="form-field">
-      <span class="form-label">Telegram admin ID</span>
-      <input name="tg_admin_id" value="{{if .Agent.TgAdminID}}{{deref .Agent.TgAdminID}}{{end}}" class="form-input" placeholder="123456789">
-      <p class="form-hint">Default approver for payment notifications. Per-bot approver ID overrides this. Get ID from @userinfobot. Leave empty to clear.</p>
-    </label>
-    <label class="form-field">
-      <span class="form-label">Max bots</span>
-      <input name="max_bots" type="number" value="{{.Agent.MaxBots}}" class="form-input">
-    </label>
-    <label class="form-field">
-      <span class="form-label">Price floor (Toman)</span>
-      <input name="price_floor" type="number" value="{{.Agent.PriceFloorToman}}" class="form-input">
-    </label>
-    <label class="form-field">
-      <span class="form-label">Price ceiling (Toman)</span>
-      <input name="price_ceiling" type="number" value="{{.Agent.PriceCeilingToman}}" class="form-input">
-    </label>
-    <label class="form-field">
-      <span class="form-label">Status</span>
-      <select name="status" class="form-input"><option value="active" {{if eq .Agent.Status "active"}}selected{{end}}>active</option><option value="disabled">disabled</option></select>
-    </label>
-    <button type="submit" class="btn btn-primary">Save</button>
-  </form>
-  <form method="post" action="/master/agents/{{.Agent.ID}}/permissions" class="bg-white rounded-xl border p-6 space-y-2 text-sm">
-    <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <h3 class="font-semibold mb-2">Permissions</h3>
-    {{if .Perms.ViewOnly}}<p class="text-xs text-slate-500 mb-2">View only mode — no capabilities selected.</p>{{end}}
-    {{range .PermFields}}<label class="flex items-center gap-2"><input type="checkbox" name="{{.Key}}" {{if .Checked}}checked{{end}}> {{.Label}}</label>{{end}}
-    <button type="submit" class="btn btn-primary mt-3">Save permissions</button>
-  </form>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+  <div>
+    <h2 class="text-2xl font-bold">{{.Agent.Name}}</h2>
+    <p class="text-sm opacity-60 mt-1">{{T .Lang "agent_edit.subtitle"}}</p>
+  </div>
+  <a href="/master/agents" class="btn btn-muted btn-sm">{{T .Lang "common.back"}}</a>
 </div>
-<h3 class="text-lg font-semibold mt-8 mb-4">Assigned panels</h3>
-<form method="post" action="/master/agents/{{.Agent.ID}}/panels" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg">
-  <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <label class="form-field">
-    <span class="form-label">Panel</span>
-    <select name="panel_id" class="form-input">
-      {{range .PanelRows}}
-      <option value="{{.Panel.ID}}">{{.Panel.Name}}{{if .Inbounds}} ({{len .Inbounds}} inbounds){{end}}</option>
-      {{end}}
-    </select>
-  </label>
-  <p class="form-hint">Discovered inbounds (xui): {{range .PanelRows}}{{range .Inbounds}}<span class="inline-block bg-slate-100 px-1 rounded mr-1">{{.ID}}:{{.Tag}}</span>{{end}}{{end}}</p>
-  <label class="form-field">
-    <span class="form-label">Max users</span>
-    <input name="max_users" type="number" class="form-input" placeholder="0 = unlimited">
-  </label>
-  <label class="form-field">
-    <span class="form-label">Max duration (days)</span>
-    <input name="expiry_cap_days" type="number" class="form-input">
-  </label>
-  <label class="form-field">
-    <span class="form-label">Inbound IDs</span>
-    <input name="inbound_ids" class="form-input" placeholder="1, 2, 3">
-    <p class="form-hint">Comma-separated (3x-ui). Leave empty for all inbounds.</p>
-  </label>
-  <button type="submit" class="btn btn-primary">Assign panel</button>
-</form>
-<ul class="mt-4 space-y-2">{{range .AgentPanels}}<li class="text-sm bg-slate-50 p-3 rounded-lg">Panel {{.PanelID}} · max {{.MaxUsers}} users · cap {{.ExpiryCapDays}}d</li>{{end}}</ul>
-{{if .AgentAdmin}}
-<p class="mt-6 text-sm">Login: <strong>{{.AgentAdmin.Username}}</strong></p>
-<form class="flex flex-wrap items-center gap-2 mt-2" method="post" action="/master/agents/{{.Agent.ID}}/reset-password">
-  <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <input name="password" type="password" placeholder="New password" class="form-input max-w-xs">
-  <button type="submit" class="btn btn-secondary btn-sm">Reset password</button>
-</form>
-{{end}}
-<h3 class="text-lg font-semibold mt-8 mb-4">Custom domain</h3>
-<div class="bg-white rounded-xl border p-6 max-w-lg space-y-3">
-  <form method="post" action="/master/agents/{{.Agent.ID}}/domain" class="space-y-3">
+
+<nav class="tabs mb-6" role="tablist">
+  <button type="button" class="tab tab-active" data-tab="settings" role="tab">{{T .Lang "agent_edit.settings"}}</button>
+  <button type="button" class="tab" data-tab="permissions" role="tab">{{T .Lang "agent_edit.permissions"}}</button>
+  <button type="button" class="tab" data-tab="panels" role="tab">{{T .Lang "agent_edit.panels"}}</button>
+  <button type="button" class="tab" data-tab="domain" role="tab">{{T .Lang "agent_edit.domain"}}</button>
+</nav>
+
+<section id="tab-settings" class="tab-panel space-y-6">
+  <div class="grid lg:grid-cols-2 gap-6">
+    <form method="post" action="/master/agents/{{.Agent.ID}}" class="card p-6 space-y-4">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "agents.name"}}</span>
+        <input name="name" value="{{.Agent.Name}}" class="form-input" required>
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "agents.tg_admin_id"}}</span>
+        <input name="tg_admin_id" value="{{if .Agent.TgAdminID}}{{deref .Agent.TgAdminID}}{{end}}" class="form-input" placeholder="123456789">
+        <p class="form-hint">{{T .Lang "agents.tg_admin_hint"}}</p>
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "agent_edit.max_bots"}}</span>
+        <input name="max_bots" type="number" value="{{.Agent.MaxBots}}" class="form-input">
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "agent_edit.price_floor"}}</span>
+        <input name="price_floor" type="number" value="{{.Agent.PriceFloorToman}}" class="form-input">
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "agent_edit.price_ceiling"}}</span>
+        <input name="price_ceiling" type="number" value="{{.Agent.PriceCeilingToman}}" class="form-input">
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "common.status"}}</span>
+        <select name="status" class="form-select">
+          <option value="active" {{if eq .Agent.Status "active"}}selected{{end}}>{{T .Lang "status.active"}}</option>
+          <option value="disabled">{{T .Lang "status.disabled"}}</option>
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
+    </form>
+
+    {{if .AgentAdmin}}
+    <div class="card p-6 space-y-3">
+      <p class="text-sm">{{T .Lang "agent_edit.login"}}: <strong>{{.AgentAdmin.Username}}</strong></p>
+      <form class="flex flex-wrap items-end gap-2" method="post" action="/master/agents/{{.Agent.ID}}/reset-password">
+        <input type="hidden" name="_csrf" value="{{.CSRF}}">
+        <label class="form-field flex-1 min-w-[10rem]">
+          <span class="form-label">{{T .Lang "agent_edit.new_password"}}</span>
+          <input name="password" type="password" class="form-input">
+        </label>
+        <button type="submit" class="btn btn-secondary btn-sm">{{T .Lang "agent_edit.password"}}</button>
+      </form>
+    </div>
+    {{end}}
+  </div>
+</section>
+
+<section id="tab-permissions" class="tab-panel hidden">
+  <form method="post" action="/master/agents/{{.Agent.ID}}/permissions" class="card p-6 space-y-2 text-sm max-w-lg">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <label class="form-field">
-      <span class="form-label">Custom domain</span>
-      <input name="custom_domain" value="{{agentDomain .Agent}}" class="form-input" placeholder="shop.example.com">
-    </label>
-    <button type="submit" class="btn btn-primary btn-sm">Save domain</button>
+    <h3 class="font-semibold mb-2">{{T .Lang "agent_edit.permissions"}}</h3>
+    {{if .Perms.ViewOnly}}<p class="text-xs opacity-60 mb-2">{{T .Lang "agent_edit.view_only"}}</p>{{end}}
+    {{range .PermFields}}<label class="flex items-center gap-2 py-1"><input type="checkbox" name="{{.Key}}" {{if .Checked}}checked{{end}}> {{.Label}}</label>{{end}}
+    <button type="submit" class="btn btn-primary mt-3">{{T .Lang "agent_edit.save_permissions"}}</button>
   </form>
-  {{if agentDomain .Agent}}
-  <p class="form-hint">Verify DNS — add TXT <code>_hodhod-verify.{{agentDomain .Agent}}</code> = <code>{{.Agent.DomainVerifyToken}}</code></p>
-  <p class="form-hint">Or CNAME <code>{{agentDomain .Agent}}</code> → <code>{{.PlatformHost}}</code></p>
-  <form method="post" action="/master/agents/{{.Agent.ID}}/verify-domain"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="btn btn-secondary btn-sm">Verify DNS</button></form>
-  {{if .Agent.DomainVerifiedAt}}
-  <p class="text-sm text-emerald-700">Verified · Panel URL: {{.AgentPublicURL}}/login</p>
-  <form method="post" action="/master/agents/{{.Agent.ID}}/domain-toggle" class="inline">
+</section>
+
+<section id="tab-panels" class="tab-panel hidden space-y-4">
+  <form method="post" action="/master/agents/{{.Agent.ID}}/panels" class="card p-6 space-y-4 max-w-lg">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <input type="hidden" name="enable" value="{{if .Agent.DomainEnabled}}0{{else}}1{{end}}">
-    <button type="submit" class="btn {{if .Agent.DomainEnabled}}btn-danger{{else}}btn-secondary{{end}} btn-sm">{{if .Agent.DomainEnabled}}Disable{{else}}Enable{{end}} domain</button>
+    <h3 class="font-semibold">{{T .Lang "agent_edit.assigned_panels"}}</h3>
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "table.panel"}}</span>
+      <select name="panel_id" class="form-select">
+        {{range .PanelRows}}
+        <option value="{{.Panel.ID}}">{{.Panel.Name}}{{if .Inbounds}} ({{len .Inbounds}} {{T $.Lang "panel_users.inbound"}}){{end}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "agent_edit.max_users"}}</span>
+      <input name="max_users" type="number" class="form-input" placeholder="{{T .Lang "agent_edit.unlimited"}}">
+    </label>
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "agent_edit.max_duration"}}</span>
+      <input name="expiry_cap_days" type="number" class="form-input">
+    </label>
+    <button type="submit" class="btn btn-primary">{{T .Lang "agent_edit.assign_panel"}}</button>
+  </form>
+  <ul class="space-y-2">{{range .AgentPanels}}<li class="card p-3 text-sm flex justify-between items-center">
+    <span>{{T $.Lang "table.panel"}} {{.PanelID}} · {{T $.Lang "agent_edit.max_users"}} {{.MaxUsers}} · {{.ExpiryCapDays}}d</span>
+    <a href="/master/agents/{{$.Agent.ID}}?access_panel={{.PanelID}}#tab-panels" class="btn btn-secondary btn-sm" onclick="document.querySelector('[data-tab=panels]').click()">{{T $.Lang "access.select_panel"}}</a>
+  </li>{{end}}</ul>
+
+  {{if .AccessPanelID}}
+  <form method="post" action="/master/agents/{{.Agent.ID}}/access" class="card p-6 space-y-6">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <input type="hidden" name="panel_id" value="{{.AccessPanelID}}">
+    <h3 class="font-semibold">{{T .Lang "access.inbound_table"}} — {{T .Lang "table.panel"}} {{.AccessPanelID}}</h3>
+    <div class="overflow-x-auto">
+      <table class="data-table text-sm">
+        <thead><tr><th>{{T .Lang "panel_users.inbound"}}</th><th>{{T .Lang "access.allow_create"}}</th><th>{{T .Lang "access.allow_view_users"}}</th></tr></thead>
+        <tbody>
+        {{range .AccessInboundRows}}
+        <tr>
+          <td>{{.InboundID}}: {{.Tag}}</td>
+          <td><input type="checkbox" name="inbound_{{.InboundID}}_create" {{if .AllowCreate}}checked{{end}}></td>
+          <td><input type="checkbox" name="inbound_{{.InboundID}}_view" {{if .AllowViewUsers}}checked{{end}}></td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    <h3 class="font-semibold">{{T .Lang "access.user_table"}}</h3>
+    <div class="overflow-x-auto max-h-64 overflow-y-auto">
+      <table class="data-table text-sm">
+        <thead><tr><th>{{T .Lang "table.username"}}</th><th>{{T .Lang "access.allow_view"}}</th><th>{{T .Lang "access.allow_modify"}}</th></tr></thead>
+        <tbody>
+        {{range .AccessUserRows}}
+        <tr>
+          <td class="font-mono text-xs">{{.Username}}</td>
+          <td><input type="checkbox" name="user_{{urlPath .Username}}_view" {{if .AllowView}}checked{{end}}></td>
+          <td><input type="checkbox" name="user_{{urlPath .Username}}_modify" {{if .AllowModify}}checked{{end}}></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="3" class="opacity-60">{{T .Lang "panel_users.empty"}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    <button type="submit" class="btn btn-primary">{{T .Lang "access.save"}}</button>
   </form>
   {{end}}
-  {{end}}
-</div>
+</section>
+
+<section id="tab-domain" class="tab-panel hidden">
+  <div class="card p-6 max-w-lg space-y-3">
+    <form method="post" action="/master/agents/{{.Agent.ID}}/domain" class="space-y-3">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "agent_edit.domain"}}</span>
+        <input name="custom_domain" value="{{agentDomain .Agent}}" class="form-input" placeholder="shop.example.com">
+      </label>
+      <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.save"}}</button>
+    </form>
+    {{if agentDomain .Agent}}
+    <p class="form-hint">TXT <code>_hodhod-verify.{{agentDomain .Agent}}</code> = <code>{{.Agent.DomainVerifyToken}}</code></p>
+    <p class="form-hint">CNAME <code>{{agentDomain .Agent}}</code> → <code>{{.PlatformHost}}</code></p>
+    <form method="post" action="/master/agents/{{.Agent.ID}}/verify-domain"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="btn btn-secondary btn-sm">{{T .Lang "agent_edit.verify_dns"}}</button></form>
+    {{if .Agent.DomainVerifiedAt}}
+    <p class="text-sm text-[var(--color-success)]">{{T .Lang "agent_edit.verified"}} · {{T .Lang "agent_edit.panel_url"}}: {{.AgentPublicURL}}/login</p>
+    <form method="post" action="/master/agents/{{.Agent.ID}}/domain-toggle" class="inline">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <input type="hidden" name="enable" value="{{if .Agent.DomainEnabled}}0{{else}}1{{end}}">
+      <button type="submit" class="btn {{if .Agent.DomainEnabled}}btn-danger{{else}}btn-secondary{{end}} btn-sm">{{if .Agent.DomainEnabled}}{{T .Lang "agent_edit.disable_domain"}}{{else}}{{T .Lang "agent_edit.enable_domain"}}{{end}}</button>
+    </form>
+    {{end}}
+    {{end}}
+  </div>
+</section>
+
+<script>
+(function(){
+  var tabs=document.querySelectorAll('[data-tab]');
+  var panels=document.querySelectorAll('.tab-panel');
+  tabs.forEach(function(tab){
+    tab.addEventListener('click',function(){
+      var id=tab.getAttribute('data-tab');
+      tabs.forEach(function(t){t.classList.toggle('tab-active',t===tab);});
+      panels.forEach(function(p){p.classList.toggle('hidden',p.id!=='tab-'+id);});
+    });
+  });
+})();
+</script>
 {{end}}

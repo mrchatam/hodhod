@@ -1,7 +1,7 @@
 {{define "panel_test_result"}}
 {{if .OK}}
-<div class="alert-ok">{{.Message}}</div>
+<div class="alert-ok">{{if .Message}}{{.Message}}{{else}}{{T $.Lang "panels.test_ok"}}{{end}}</div>
 {{else}}
-<div class="alert-err">{{.Message}}</div>
+<div class="alert-err">{{if .Message}}{{.Message}}{{else}}{{T $.Lang "panels.test_fail"}}{{end}}</div>
 {{end}}
 {{end}}

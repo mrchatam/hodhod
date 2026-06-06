@@ -1,1 +1,62 @@
-{{/* Shared form styling — use .form-field, .form-label, .form-input, .form-hint classes from layout.html */}}
+{{define "form_field"}}
+<div class="form-field {{if .Class}}{{.Class}}{{end}}">
+  <label class="form-label" {{if .ID}}for="{{.ID}}"{{end}}>{{.Label}}{{if .Required}} <span class="text-red-500">*</span>{{end}}</label>
+  {{if eq .Type "select"}}
+  <select {{if .ID}}id="{{.ID}}"{{end}} name="{{.Name}}" class="form-select" {{if .Required}}required{{end}}>{{.Body}}</select>
+  {{else if eq .Type "textarea"}}
+  <textarea {{if .ID}}id="{{.ID}}"{{end}} name="{{.Name}}" class="form-textarea" rows="{{if .Rows}}{{.Rows}}{{else}}3{{end}}" placeholder="{{.Placeholder}}" {{if .Required}}required{{end}}>{{.Value}}</textarea>
+  {{else}}
+  <input {{if .ID}}id="{{.ID}}"{{end}} type="{{if .Type}}{{.Type}}{{else}}text{{end}}" name="{{.Name}}" value="{{.Value}}" placeholder="{{.Placeholder}}" class="form-input" {{if .Required}}required{{end}} {{if .Attrs}}{{.Attrs}}{{end}}>
+  {{end}}
+  {{if .Hint}}<p class="form-hint">{{.Hint}}</p>{{end}}
+  {{if .Error}}<p class="form-error">{{.Error}}</p>{{end}}
+</div>
+{{end}}
+
+{{define "page_header"}}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <div>
+    <h2 class="text-2xl font-bold">{{.Title}}</h2>
+    {{if .Subtitle}}<p class="text-sm opacity-60 mt-1">{{.Subtitle}}</p>{{end}}
+  </div>
+  {{if .Action}}{{.Action}}{{end}}
+</div>
+{{end}}
+
+{{define "empty_state"}}
+<div class="card p-10 text-center">
+  <p class="text-lg opacity-60">{{if .Message}}{{.Message}}{{else}}{{T .Lang "empty.default"}}{{end}}</p>
+  {{if .Action}}<div class="mt-4">{{.Action}}</div>{{end}}
+</div>
+{{end}}
+
+{{define "pagination"}}
+{{with .Pagination}}
+{{if gt .Total 0}}
+<nav class="pagination" aria-label="{{T $.Lang "pagination.page"}}">
+  <p class="text-sm">{{printf (T $.Lang "pagination.showing") .From .To .Total}}</p>
+  <div class="pagination-links">
+    {{if .HasPrev}}<a href="{{.PrevURL}}" class="btn btn-muted btn-sm">{{T $.Lang "pagination.prev"}}</a>{{end}}
+    {{range $n := .PageNumbers}}
+      {{if eq $n -1}}<span>…</span>
+      {{else if eq $n .Page}}<span class="active">{{$n}}</span>
+      {{else}}<a href="{{$.PageURL $n}}">{{$n}}</a>{{end}}
+    {{end}}
+    {{if .HasNext}}<a href="{{.NextURL}}" class="btn btn-muted btn-sm">{{T $.Lang "pagination.next"}}</a>{{end}}
+  </div>
+</nav>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "modal"}}
+<div id="{{.ID}}" class="modal-backdrop hidden" data-close role="dialog" aria-modal="true" aria-labelledby="{{.ID}}-title">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="{{.ID}}-title" class="text-lg font-semibold">{{.Title}}</h3>
+      <button type="button" class="btn btn-muted btn-sm" onclick="document.getElementById('{{.ID}}').classList.add('hidden')">{{T .Lang "common.close"}}</button>
+    </div>
+    {{.Body}}
+  </div>
+</div>
+{{end}}

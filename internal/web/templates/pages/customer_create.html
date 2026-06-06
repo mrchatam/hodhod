@@ -1,0 +1,19 @@
+{{define "content"}}
+<div class="mb-6">
+  <a href="/customers" class="btn btn-link btn-sm mb-2">← {{T .Lang "customers.title"}}</a>
+  <h2 class="text-2xl font-bold">{{T .Lang "customers.create"}}</h2>
+  <p class="text-sm opacity-60 mt-1">{{T .Lang "customers.pick_panel"}}</p>
+</div>
+{{if .Panels}}
+<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  {{range .Panels}}
+  <a href="/agent/panels/{{.ID}}/customers?create=1" class="card p-5 hover:border-brand-500/50 block">
+    <p class="font-semibold">{{.Name}}</p>
+    <p class="text-xs opacity-60 mt-1">{{T $.Lang "customers.create"}}</p>
+  </a>
+  {{end}}
+</div>
+{{else}}
+<div class="card p-10 text-center opacity-60">{{T .Lang "customers.no_create"}}</div>
+{{end}}
+{{end}}

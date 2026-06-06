@@ -1,37 +1,42 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-2">Bot @{{.Bot.Username}}</h2>
-<p class="text-sm text-slate-500 mb-4">Webhook: {{.WebhookStatus}} · <span class="font-mono text-xs">{{.WebhookURL}}</span></p>
-<form method="post" action="/agent/bots/{{.Bot.ID}}/settings" class="bg-white rounded-xl border p-6 space-y-4 max-w-lg mt-4">
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <div>
+    <h2 class="text-2xl font-bold">@{{.Bot.Username}}</h2>
+    <p class="text-sm opacity-60 mt-1">{{T .Lang "bot_settings.webhook"}}: {{.WebhookStatus}} · <span class="font-mono text-xs">{{.WebhookURL}}</span></p>
+  </div>
+  <a href="/agent/bots" class="btn btn-muted btn-sm">{{T .Lang "common.back"}}</a>
+</div>
+
+<form method="post" action="/agent/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
   <label class="form-field">
-    <span class="form-label">Approver Telegram ID</span>
+    <span class="form-label">{{T .Lang "bots.approver_id"}}</span>
     <input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123456789">
-    <p class="form-hint">Who receives payment approval requests. Get ID from @userinfobot.</p>
   </label>
   <label class="form-field">
-    <span class="form-label">Support contact</span>
+    <span class="form-label">{{T .Lang "bot_settings.support_contact"}}</span>
     <input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input">
   </label>
   <label class="form-field">
-    <span class="form-label">Welcome message</span>
-    <textarea name="welcome_text" class="form-input" rows="2">{{index .Settings "welcome_text"}}</textarea>
+    <span class="form-label">{{T .Lang "bot_settings.welcome_message"}}</span>
+    <textarea name="welcome_text" class="form-textarea" rows="2">{{index .Settings "welcome_text"}}</textarea>
   </label>
   <label class="form-field">
-    <span class="form-label">Card numbers for top-up</span>
-    <textarea name="card_numbers" class="form-input" rows="2">{{index .Settings "card_numbers"}}</textarea>
+    <span class="form-label">{{T .Lang "bot_settings.card_numbers"}}</span>
+    <textarea name="card_numbers" class="form-textarea" rows="2">{{index .Settings "card_numbers"}}</textarea>
   </label>
   <label class="form-field">
-    <span class="form-label">Usage warn %</span>
+    <span class="form-label">{{T .Lang "bot_settings.warn_percent"}}</span>
     <input name="warn_percent" value="{{index .Settings "warn_percent"}}" class="form-input">
   </label>
   <label class="form-field">
-    <span class="form-label">Force-join channel</span>
+    <span class="form-label">{{T .Lang "bot_settings.force_join"}}</span>
     <input name="force_join_channel" value="{{index .Settings "force_join_channel"}}" class="form-input" placeholder="@channel">
   </label>
   <label class="form-field">
-    <span class="form-label">New bot token <span class="text-slate-400 font-normal">(optional)</span></span>
-    <input name="token" type="password" class="form-input" placeholder="Leave blank to keep current">
+    <span class="form-label">{{T .Lang "bot_settings.new_token"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></span>
+    <input name="token" type="password" class="form-input" placeholder="{{T .Lang "panel_edit.keep_current"}}">
   </label>
-  <button type="submit" class="btn btn-primary">Save</button>
+  <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
 {{end}}

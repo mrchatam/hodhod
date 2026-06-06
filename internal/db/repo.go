@@ -448,6 +448,14 @@ func (s *Store) ListServicesForPanel(ctx context.Context, panelID int64) ([]Serv
 	return out, s.DB.WithContext(ctx).Where("panel_id = ?", panelID).Order("id DESC").Find(&out).Error
 }
 
+func (s *Store) ListServicesForPanelUsernames(ctx context.Context, panelID int64, usernames []string) ([]Service, error) {
+	if len(usernames) == 0 {
+		return nil, nil
+	}
+	var out []Service
+	return out, s.DB.WithContext(ctx).Where("panel_id = ? AND panel_username IN ?", panelID, usernames).Find(&out).Error
+}
+
 func (s *Store) GetServiceByPanelUsername(ctx context.Context, panelID int64, username string) (*Service, error) {
 	var svc Service
 	err := s.DB.WithContext(ctx).Where("panel_id = ? AND panel_username = ?", panelID, username).Order("id DESC").First(&svc).Error

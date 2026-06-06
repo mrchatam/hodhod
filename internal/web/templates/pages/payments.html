@@ -1,32 +1,73 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">Pending payments</h2>
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500"><tr>
-      <th class="text-left p-3">ID</th><th class="text-left p-3">Bot</th><th class="text-left p-3">Amount</th><th class="text-left p-3">Receipt</th><th class="text-right p-3">Actions</th>
-    </tr></thead>
-    <tbody>
-    {{range .Payments}}
-    <tr class="border-t border-slate-100">
-      <td class="p-3">#{{.ID}}</td>
-      <td class="p-3">{{.BotID}}</td>
-      <td class="p-3">{{toman .AmountToman}} {{if $.Currency}}{{$.Currency}}{{else}}Toman{{end}}</td>
-      <td class="p-3"><a href="/payments/{{.BotID}}/{{.ID}}/receipt" target="_blank" class="btn btn-link btn-sm">View</a></td>
-      <td class="p-3 text-right">
-        <div class="flex flex-wrap justify-end gap-1">
-        <form class="inline" method="post" action="/payments/{{.BotID}}/{{.ID}}/approve"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">Approve</button></form>
-        <form class="inline" method="post" action="/payments/{{.BotID}}/{{.ID}}/reject"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">Reject</button></form>
-        </div>
-      </td>
-    </tr>
-    {{else}}<tr><td colspan="5" class="p-8 text-center text-slate-400">No pending payments</td></tr>{{end}}
-    </tbody>
-  </table>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "payments.title"}}</h2>
 </div>
+
+<h3 class="text-lg font-semibold mb-3">{{T .Lang "payments.pending"}}</h3>
+<div class="card desktop-table overflow-hidden mb-8">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{T .Lang "table.id"}}</th>
+          <th>{{T .Lang "table.bot"}}</th>
+          <th>{{T .Lang "payments.amount"}}</th>
+          <th>{{T .Lang "payments.receipt"}}</th>
+          <th class="text-end">{{T .Lang "common.actions"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {{range .Payments}}
+      <tr>
+        <td>#{{.ID}}</td>
+        <td>{{.BotID}}</td>
+        <td>{{toman .AmountToman}} {{if $.Currency}}{{$.Currency}}{{else}}Toman{{end}}</td>
+        <td><a href="/payments/{{.BotID}}/{{.ID}}/receipt" target="_blank" class="btn btn-link btn-sm">{{T $.Lang "payments.view"}}</a></td>
+        <td class="text-end">
+          <div class="flex flex-wrap justify-end gap-1">
+            <form class="inline" method="post" action="/payments/{{.BotID}}/{{.ID}}/approve"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">{{T $.Lang "common.approve"}}</button></form>
+            <form class="inline" method="post" action="/payments/{{.BotID}}/{{.ID}}/reject"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">{{T $.Lang "common.reject"}}</button></form>
+          </div>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5" class="text-center py-10 opacity-60">{{T $.Lang "payments.empty_pending"}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="space-y-3 md:hidden mb-8">
+  {{range .Payments}}
+  <div class="mobile-card">
+    <div class="flex justify-between items-start">
+      <span class="font-medium">#{{.ID}}</span>
+      <span>{{toman .AmountToman}} {{if $.Currency}}{{$.Currency}}{{else}}Toman{{end}}</span>
+    </div>
+    <p class="text-sm opacity-60">{{T $.Lang "table.bot"}}: {{.BotID}}</p>
+    <div class="flex flex-wrap gap-2 pt-1">
+      <a href="/payments/{{.BotID}}/{{.ID}}/receipt" target="_blank" class="btn btn-muted btn-sm">{{T $.Lang "payments.view"}}</a>
+      <form class="inline" method="post" action="/payments/{{.BotID}}/{{.ID}}/approve"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-success btn-sm">{{T $.Lang "common.approve"}}</button></form>
+      <form class="inline" method="post" action="/payments/{{.BotID}}/{{.ID}}/reject"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="btn btn-danger btn-sm">{{T $.Lang "common.reject"}}</button></form>
+    </div>
+  </div>
+  {{else}}
+  <div class="card p-10 text-center opacity-60">{{T .Lang "payments.empty_pending"}}</div>
+  {{end}}
+</div>
+
 {{if .History}}
-<h3 class="text-lg font-semibold mt-8 mb-4">Recent history</h3>
-<div class="bg-white rounded-xl border border-slate-200 p-4 text-sm space-y-2">
-{{range .History}}<div class="flex justify-between"><span>#{{.ID}} bot {{.BotID}}</span><span>{{toman .AmountToman}} · {{.Status}}</span></div>{{end}}
+<h3 class="text-lg font-semibold mb-3">{{T .Lang "payments.recent_history"}}</h3>
+<div class="card p-4 text-sm space-y-2">
+  {{range .History}}
+  <div class="flex flex-col sm:flex-row sm:justify-between gap-1 py-2 border-b border-[var(--color-border)] last:border-0">
+    <span>#{{.ID}} · {{T $.Lang "table.bot"}} {{.BotID}}</span>
+    <span class="opacity-60">{{toman .AmountToman}} · {{.Status}}</span>
+  </div>
+  {{else}}
+  <p class="text-center opacity-60 py-4">{{T .Lang "payments.empty_history"}}</p>
+  {{end}}
 </div>
 {{end}}
 {{end}}

@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -77,11 +78,180 @@ func (s *Server) pageAgentEdit(w http.ResponseWriter, r *http.Request) {
 	if len(admins) > 0 {
 		agentAdmin = &admins[0]
 	}
+	inboundGrants, _ := s.Store.ListAgentInboundGrants(r.Context(), id, 0)
+	inboundGrantsByPanel := map[int64][]db.AgentInboundGrant{}
+	for _, g := range inboundGrants {
+		inboundGrantsByPanel[g.PanelID] = append(inboundGrantsByPanel[g.PanelID], g)
+	}
+	userGrants, _ := s.Store.ListAgentUserGrants(r.Context(), id, 0)
+	userGrantsByPanel := map[int64][]db.AgentUserGrant{}
+	for _, g := range userGrants {
+		userGrantsByPanel[g.PanelID] = append(userGrantsByPanel[g.PanelID], g)
+	}
+	accessPanelID, _ := strconv.ParseInt(r.URL.Query().Get("access_panel"), 10, 64)
+	if accessPanelID == 0 && len(agentPanels) > 0 {
+		accessPanelID = agentPanels[0].PanelID
+	}
+	type accessPanelUsers struct {
+		PanelID int64
+		Users   []panels.UserInfo
+	}
+	var accessUsers []accessPanelUsers
+	for _, ap := range agentPanels {
+		if client, err := s.Panels.Get(r.Context(), ap.PanelID); err == nil {
+			if users, err := client.ListUsers(r.Context()); err == nil {
+				accessUsers = append(accessUsers, accessPanelUsers{PanelID: ap.PanelID, Users: users})
+			}
+		}
+	}
+	type accessInboundRow struct {
+		InboundID      int
+		Tag            string
+		AllowCreate    bool
+		AllowViewUsers bool
+	}
+	type accessUserRow struct {
+		Username    string
+		AllowView   bool
+		AllowModify bool
+	}
+	var accessInboundRows []accessInboundRow
+	var accessUserRows []accessUserRow
+	grantByInbound := map[int]db.AgentInboundGrant{}
+	for _, g := range inboundGrantsByPanel[accessPanelID] {
+		grantByInbound[g.InboundID] = g
+	}
+	for _, pr := range panelRows {
+		if pr.Panel.ID != accessPanelID {
+			continue
+		}
+		for _, inb := range pr.Inbounds {
+			g := grantByInbound[inb.ID]
+			accessInboundRows = append(accessInboundRows, accessInboundRow{
+				InboundID: inb.ID, Tag: inb.Tag,
+				AllowCreate: g.AllowCreate, AllowViewUsers: g.AllowViewUsers,
+			})
+		}
+		break
+	}
+	grantByUser := map[string]db.AgentUserGrant{}
+	for _, g := range userGrantsByPanel[accessPanelID] {
+		grantByUser[g.PanelUsername] = g
+	}
+	for _, au := range accessUsers {
+		if au.PanelID != accessPanelID {
+			continue
+		}
+		for _, u := range au.Users {
+			g := grantByUser[u.Username]
+			accessUserRows = append(accessUserRows, accessUserRow{
+				Username: u.Username, AllowView: g.AllowView, AllowModify: g.AllowModify,
+			})
+		}
+		break
+	}
 	s.renderPage(w, "agent_edit", r, map[string]any{
 		"Agent": agent, "Perms": perms, "AgentPanels": agentPanels, "PanelRows": panelRows,
 		"AgentAdmin": agentAdmin, "PermFields": permFields(perms),
 		"PlatformHost": s.Cfg.MainHost(), "AgentPublicURL": s.AgentPublicURL(r.Context(), agent),
+		"InboundGrants": inboundGrantsByPanel, "UserGrants": userGrantsByPanel,
+		"AccessPanelID": accessPanelID, "AccessInboundRows": accessInboundRows,
+		"AccessUserRows": accessUserRows,
 	})
+}
+
+func (s *Server) postAgentAccess(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	_ = r.ParseForm()
+	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
+	if panelID == 0 {
+		http.Error(w, "panel required", http.StatusBadRequest)
+		return
+	}
+	var inboundGrants []db.AgentInboundGrant
+	for key, val := range r.Form {
+		if !strings.HasPrefix(key, "inbound_") || val[0] != "on" {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(key, "inbound_"), "_")
+		if len(parts) != 2 {
+			continue
+		}
+		inboundID, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		g := db.AgentInboundGrant{InboundID: inboundID}
+		switch parts[1] {
+		case "create":
+			g.AllowCreate = true
+		case "view":
+			g.AllowViewUsers = true
+		default:
+			continue
+		}
+		found := false
+		for i := range inboundGrants {
+			if inboundGrants[i].InboundID == inboundID {
+				if parts[1] == "create" {
+					inboundGrants[i].AllowCreate = true
+				} else {
+					inboundGrants[i].AllowViewUsers = true
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			inboundGrants = append(inboundGrants, g)
+		}
+	}
+	if err := s.Store.ReplaceAgentInboundGrants(r.Context(), id, panelID, inboundGrants); err != nil {
+		s.saveFlash(w, err, "")
+		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
+		return
+	}
+	var userGrants []db.AgentUserGrant
+	for key, val := range r.Form {
+		if !strings.HasPrefix(key, "user_") || val[0] != "on" {
+			continue
+		}
+		parts := strings.SplitN(strings.TrimPrefix(key, "user_"), "_", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		username, err := url.PathUnescape(parts[0])
+		if err != nil {
+			username = parts[0]
+		}
+		g := db.AgentUserGrant{PanelUsername: username}
+		switch parts[1] {
+		case "view":
+			g.AllowView = true
+		case "modify":
+			g.AllowModify = true
+		default:
+			continue
+		}
+		found := false
+		for i := range userGrants {
+			if userGrants[i].PanelUsername == username {
+				if parts[1] == "view" {
+					userGrants[i].AllowView = true
+				} else {
+					userGrants[i].AllowModify = true
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			userGrants = append(userGrants, g)
+		}
+	}
+	err := s.Store.ReplaceAgentUserGrants(r.Context(), id, panelID, userGrants)
+	s.saveFlash(w, err, "Access saved")
+	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
 }
 
 func permFields(p *db.AgentPermissions) []map[string]any {
@@ -170,7 +340,7 @@ func (s *Server) postAgentPanel(w http.ResponseWriter, r *http.Request) {
 	maxUsers, _ := strconv.Atoi(r.FormValue("max_users"))
 	capDays, _ := strconv.Atoi(r.FormValue("expiry_cap_days"))
 	ap := &db.AgentPanel{
-		AgentID: id, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(parseInboundIDs(r.FormValue("inbound_ids"))),
+		AgentID: id, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(nil),
 		MaxUsers: maxUsers, ExpiryCapDays: capDays,
 	}
 	err := s.Store.UpsertAgentPanel(r.Context(), ap)
@@ -229,8 +399,10 @@ func (s *Server) postPanel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) testPanel(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	lang, _ := s.Store.GetSetting(r.Context(), "admin", admin.ID, "lang")
 	err := s.Panels.TestConnection(r.Context(), id)
-	ok, msg := panelTestMessage(err)
+	ok, msg := panelTestMessage(lang, err)
 	if err != nil {
 		admin := r.Context().Value(ctxAdmin).(*db.Admin)
 		s.audit(r, &admin.ID, "panel_test_fail", "panel", id, map[string]any{"error": err.Error()})

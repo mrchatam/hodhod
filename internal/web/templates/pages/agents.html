@@ -1,31 +1,69 @@
 {{define "content"}}
-<h2 class="text-2xl font-bold text-slate-900 mb-6">Agents</h2>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">{{T .Lang "agents.title"}}</h2>
+</div>
+
 <div class="grid lg:grid-cols-2 gap-6">
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <table class="w-full text-sm"><thead class="bg-slate-50"><tr><th class="p-3 text-left">Name</th><th class="p-3 text-left">Status</th><th class="p-3"></th></tr></thead>
-    <tbody>{{range .Agents}}<tr class="border-t"><td class="p-3">{{.Name}}</td><td class="p-3">{{.Status}}</td><td class="p-3"><a href="/master/agents/{{.ID}}" class="btn btn-secondary btn-sm">Manage</a></td></tr>{{end}}</tbody></table>
+  <div class="card desktop-table overflow-hidden">
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>{{T .Lang "agents.name"}}</th>
+            <th>{{T .Lang "common.status"}}</th>
+            <th class="text-end">{{T .Lang "common.actions"}}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {{range .Agents}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td><span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}}">{{if eq .Status "active"}}{{T $.Lang "status.active"}}{{else}}{{.Status}}{{end}}</span></td>
+          <td class="text-end"><a href="/master/agents/{{.ID}}" class="btn btn-secondary btn-sm">{{T $.Lang "agents.manage"}}</a></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="3" class="text-center py-10 opacity-60">{{T $.Lang "agents.empty"}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
   </div>
-  <form method="post" action="/master/agents" class="bg-white rounded-xl border border-slate-200 p-6 space-y-4 h-fit">
+
+  <div class="space-y-3 md:hidden">
+    {{range .Agents}}
+    <div class="mobile-card flex items-center justify-between gap-3">
+      <div>
+        <p class="font-medium">{{.Name}}</p>
+        <span class="badge {{if eq .Status "active"}}badge-active{{else}}badge-disabled{{end}} mt-1">{{.Status}}</span>
+      </div>
+      <a href="/master/agents/{{.ID}}" class="btn btn-secondary btn-sm">{{T $.Lang "agents.manage"}}</a>
+    </div>
+    {{else}}
+    <div class="card p-10 text-center opacity-60">{{T .Lang "agents.empty"}}</div>
+    {{end}}
+  </div>
+
+  <form method="post" action="/master/agents" class="card p-6 space-y-4 h-fit">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <h3 class="font-semibold">New agent</h3>
+    <h3 class="font-semibold">{{T .Lang "agents.new_agent"}}</h3>
     <label class="form-field">
-      <span class="form-label">Agent name</span>
+      <span class="form-label">{{T .Lang "agents.name"}}</span>
       <input name="name" class="form-input" required>
     </label>
     <label class="form-field">
-      <span class="form-label">Web login username</span>
+      <span class="form-label">{{T .Lang "agents.login_username"}}</span>
       <input name="login_username" class="form-input">
     </label>
     <label class="form-field">
-      <span class="form-label">Web login password</span>
+      <span class="form-label">{{T .Lang "agents.login_password"}}</span>
       <input name="login_password" type="password" class="form-input">
     </label>
     <label class="form-field">
-      <span class="form-label">Telegram admin ID <span class="text-slate-400 font-normal">(optional)</span></span>
+      <span class="form-label">{{T .Lang "agents.tg_admin_id"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></span>
       <input name="tg_admin_id" class="form-input" placeholder="123456789">
-      <p class="form-hint">Default approver for payment notifications across this agent's bots. Get ID from @userinfobot.</p>
+      <p class="form-hint">{{T .Lang "agents.tg_admin_hint"}}</p>
     </label>
-    <button type="submit" class="btn btn-primary">Create</button>
+    <button type="submit" class="btn btn-primary">{{T .Lang "common.create"}}</button>
   </form>
 </div>
 {{end}}
