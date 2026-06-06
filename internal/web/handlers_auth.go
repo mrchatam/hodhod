@@ -19,7 +19,9 @@ func (s *Server) pageLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]any{"Error": r.URL.Query().Get("e") != "", "Lang": lang, "IsRTL": lang == "fa"}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = s.loginT.Execute(w, data)
+	if err := s.loginT.ExecuteTemplate(w, "login.html", data); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) postLogin(w http.ResponseWriter, r *http.Request) {
