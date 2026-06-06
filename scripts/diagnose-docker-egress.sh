@@ -2,6 +2,12 @@
 # Diagnose why host curl works but Docker bridge containers cannot reach the internet.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/docker-net-common.sh
+source "$ROOT/scripts/docker-net-common.sh"
+
+hodhod_net="$(hodhod_compose_network "$ROOT")"
+
 echo "=== Hodhod Docker egress diagnostics ==="
 echo ""
 
@@ -13,15 +19,24 @@ else
 fi
 echo ""
 
-echo "2) Container reachability (bridge network)"
-if docker run --rm curlimages/curl:8.5.0 -sS --max-time 12 -o /dev/null \
-  "https://api.telegram.org/bot123:fake/getMe" 2>/dev/null; then
-  echo "   OK — bridge egress works"
+echo "2) Container on Hodhod compose network (${hodhod_net:-not found})"
+if [[ -z "$hodhod_net" ]]; then
+  echo "   SKIP — start hodhod-app first (docker compose up -d)"
+elif docker_egress_test "$hodhod_net"; then
+  echo "   OK — compose network egress works (this is what hodhod-app uses)"
   echo ""
-  echo "No Docker egress issue detected."
+  echo "No Docker egress issue detected for Hodhod."
   exit 0
 else
-  echo "   FAIL — bridge egress broken (typical: missing SNAT/MASQUERADE for container traffic)"
+  echo "   FAIL — compose network egress broken"
+fi
+echo ""
+
+echo "2b) Container on default bridge (docker0 — NOT what hodhod-app uses)"
+if docker_egress_test ""; then
+  echo "   OK — default bridge egress works"
+else
+  echo "   FAIL — default bridge egress broken (may differ from compose network)"
 fi
 echo ""
 
@@ -34,38 +49,29 @@ echo ""
 echo "4) Docker iptables integration"
 if [[ -f /etc/docker/daemon.json ]] && grep -q '"iptables"[[:space:]]*:[[:space:]]*false' /etc/docker/daemon.json 2>/dev/null; then
   echo "   FAIL — /etc/docker/daemon.json has \"iptables\": false"
-  echo "   → remove that line or set true, then: sudo systemctl restart docker"
 else
-  echo "   OK — docker iptables not explicitly disabled (or no daemon.json)"
+  echo "   OK — docker iptables not explicitly disabled"
 fi
 echo ""
 
-echo "5) NAT MASQUERADE rules (docker should manage these)"
+vpn="$(detect_vpn_hint || true)"
+if [[ -n "$vpn" ]]; then
+  echo "5) VPN detected: $vpn (often breaks Docker SNAT — rules must be inserted before VPN routing)"
+  echo ""
+fi
+
+echo "6) NAT MASQUERADE rules"
 if command -v iptables >/dev/null 2>&1; then
-  masq="$(sudo iptables -t nat -S POSTROUTING 2>/dev/null | grep -i masquerade || true)"
-  if [[ -n "$masq" ]]; then
-    echo "$masq" | sed 's/^/   /'
-  else
-    echo "   WARN — no MASQUERADE rules in nat POSTROUTING"
-    echo "   → sudo systemctl restart docker"
-    echo "   → ensure Docker can manage iptables (no \"iptables\": false in daemon.json)"
-  fi
-else
-  echo "   (iptables not installed — check nftables if using nft-only firewall)"
+  sudo iptables -t nat -S POSTROUTING 2>/dev/null | grep -i masquerade | sed 's/^/   /' || echo "   (none)"
 fi
 echo ""
 
-echo "6) Compose network subnet"
-net_name="$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E '^hodhod_' | head -1 || true)"
-if [[ -n "$net_name" ]]; then
-  docker network inspect "$net_name" --format '   network {{.Name}} subnet {{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true
+if [[ -n "$hodhod_net" ]]; then
+  docker network inspect "$hodhod_net" --format '7) Compose network {{.Name}} subnet {{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true
+  echo ""
 fi
-echo ""
 
-echo "=== Fix (standard Docker — recommended) ==="
-echo ""
+echo "=== Fix ==="
 echo "  sudo bash scripts/fix-docker-egress.sh --apply"
-echo "  # or: bash install.sh → 8) Fix Docker outbound networking"
-echo ""
-echo "Ensure .env: HODHOD_HOST_NETWORK=0  DEPLOY_MODE=docker"
-echo "Then: bash install.sh → Update"
+echo "  # re-test on compose network:"
+echo "  docker run --rm --network ${hodhod_net:-hodhod_default} curlimages/curl:8.5.0 -sS --max-time 12 https://api.telegram.org/bot123:fake/getMe"

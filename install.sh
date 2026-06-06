@@ -615,20 +615,23 @@ wait_health() {
   return 1
 }
 
-# Bridge egress test — host curl can work while container TCP egress is broken (SNAT/VPN/nftables).
+# Bridge egress test on the Hodhod compose network (not default docker0).
 check_docker_egress() {
   [[ "$DEPLOY_MODE" == "native" ]] && return 0
   [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]] && return 0
   if ! command -v docker >/dev/null 2>&1; then
     return 0
   fi
-  ui_hint "Checking outbound HTTPS from a throwaway container..."
-  if docker run --rm curlimages/curl:8.5.0 -sS --max-time 12 -o /dev/null \
-    "https://api.telegram.org/bot123:fake/getMe" 2>/dev/null; then
-    ui_ok "Docker bridge egress OK."
+  # shellcheck source=scripts/docker-net-common.sh
+  source "$ROOT/scripts/docker-net-common.sh"
+  local net
+  net="$(hodhod_compose_network "$ROOT")"
+  ui_hint "Checking outbound HTTPS from Hodhod compose network (${net:-unknown})..."
+  if docker_egress_test "$net"; then
+    ui_ok "Docker compose network egress OK."
     return 0
   fi
-  ui_warn "Docker bridge egress FAILED (host curl may still work)."
+  ui_warn "Docker compose network egress FAILED (host curl may still work)."
   ui_hint "Fix: sudo bash scripts/fix-docker-egress.sh --apply"
   return 1
 }
