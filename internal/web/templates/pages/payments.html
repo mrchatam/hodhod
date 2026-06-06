@@ -9,6 +9,7 @@
       <option value="">All</option>
       {{range .Bots}}<option value="{{.ID}}" {{if eq $.Filter.BotID .ID}}selected{{end}}>@{{.Username}}</option>{{end}}
     </select>
+    <p class="form-hint">{{T .Lang "form_hint.payments_bot"}}</p>
   </label>
   <label class="form-field"><span class="form-label">{{T .Lang "common.status"}}</span>
     <select name="status" class="form-select">
@@ -18,7 +19,7 @@
       <option value="rejected" {{if eq .Filter.Status "rejected"}}selected{{end}}>rejected</option>
     </select>
   </label>
-  <label class="form-field"><span class="form-label">From</span><input type="date" name="date_from" class="form-input" value="{{if .Filter.DateFrom}}{{.Filter.DateFrom.Format "2006-01-02"}}{{end}}"></label>
+  <label class="form-field"><span class="form-label">From</span><input type="date" name="date_from" class="form-input" value="{{if .Filter.DateFrom}}{{.Filter.DateFrom.Format "2006-01-02"}}{{end}}"><p class="form-hint">{{T .Lang "form_hint.payments_dates"}}</p></label>
   <label class="form-field"><span class="form-label">To</span><input type="date" name="date_to" class="form-input" value="{{if .Filter.DateTo}}{{.Filter.DateTo.Format "2006-01-02"}}{{end}}"></label>
   <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.filter"}}</button>
 </form>

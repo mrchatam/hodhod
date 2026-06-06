@@ -55,14 +55,38 @@
 <div id="create-modal" class="modal-backdrop {{if not .ShowCreateModal}}hidden{{end}}">
   <div class="modal-panel">
     <h3 class="font-semibold mb-4">{{T .Lang "users.create_modal"}}</h3>
+    {{if .Templates}}
+    <div class="mb-4">
+      <p class="text-sm opacity-60 mb-2">{{T .Lang "panel_users.templates"}}</p>
+      <div class="flex flex-wrap gap-2">
+        {{range .Templates}}
+        <button type="button" class="btn btn-secondary btn-sm template-pick" data-volume="{{.VolumeGB}}" data-days="{{.DurationDays}}" data-note="{{.Note}}" data-inbounds="{{range $i, $id := .InboundIDs}}{{if $i}},{{end}}{{$id}}{{end}}">{{.Name}}</button>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
     <form method="post" action="/agent/panels/{{.Panel.ID}}/users" class="space-y-4">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
       <label class="form-field"><span class="form-label">{{T .Lang "services.label"}}</span><input name="label" class="form-input"></label>
       <label class="form-field"><span class="form-label">{{T .Lang "services.contact"}}</span><input name="contact" class="form-input"></label>
-      <div class="grid grid-cols-2 gap-3">
-        <label class="form-field"><span class="form-label">{{T .Lang "panel_users.volume"}}</span><input name="volume_gb" type="number" value="30" class="form-input"></label>
-        <label class="form-field"><span class="form-label">{{T .Lang "panel_users.duration"}}</span><input name="duration_days" type="number" value="30" class="form-input"></label>
+      {{if gt (len .InboundRows) 1}}
+      <div class="form-field">
+        <span class="form-label">{{T .Lang "panel_users.inbound"}}</span>
+        <div class="inbound-grid mt-1">
+          {{range .InboundRows}}
+          <label><input type="radio" name="inbound_ids" value="{{.ID}}" class="inbound-cb" required> {{.ID}}: {{.Tag}}</label>
+          {{end}}
+        </div>
+        <p class="form-hint">{{T .Lang "agent_edit.inbound_hint"}}</p>
       </div>
+      {{else if eq (len .InboundRows) 1}}
+      <input type="hidden" name="inbound_ids" value="{{(index .InboundRows 0).ID}}">
+      {{end}}
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-field"><span class="form-label">{{T .Lang "panel_users.volume"}}</span><input name="volume_gb" id="create-volume" type="number" value="30" class="form-input"></label>
+        <label class="form-field"><span class="form-label">{{T .Lang "panel_users.duration"}}</span><input name="duration_days" id="create-days" type="number" value="30" class="form-input"></label>
+      </div>
+      <label class="form-field"><span class="form-label">{{T .Lang "panel_users.note"}}</span><input name="note" id="create-note" class="form-input"></label>
       <div class="flex gap-2 justify-end">
         <button type="button" class="btn btn-muted btn-sm" data-modal-close="create-modal">{{T .Lang "common.cancel"}}</button>
         <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.create"}}</button>

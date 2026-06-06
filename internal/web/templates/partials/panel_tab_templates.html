@@ -1,0 +1,83 @@
+{{define "panel_tab_templates"}}
+<section class="space-y-6 max-w-3xl">
+  <p class="text-sm opacity-60">{{T .Lang "form_hint.templates_intro"}}</p>
+
+  {{if .Templates}}
+  <div class="card overflow-hidden">
+    <table class="data-table text-sm">
+      <thead>
+        <tr>
+          <th>{{T .Lang "panel_users.templates"}}</th>
+          <th>{{T .Lang "panel_users.volume"}}</th>
+          <th>{{T .Lang "panel_users.duration"}}</th>
+          <th>{{T .Lang "panel_users.inbound"}}</th>
+          <th class="text-end">{{T .Lang "common.actions"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {{range .Templates}}
+      <tr>
+        <td class="font-medium">{{.Name}}</td>
+        <td>{{.VolumeGB}} GB</td>
+        <td>{{.DurationDays}}d</td>
+        <td class="text-xs">{{if .InboundIDs}}{{range $i, $id := .InboundIDs}}{{if $i}}, {{end}}{{$id}}{{end}}{{else}}—{{end}}</td>
+        <td class="text-end flex gap-2 justify-end">
+          <button type="button" class="btn btn-secondary btn-sm template-edit" data-name="{{.Name}}" data-volume="{{.VolumeGB}}" data-days="{{.DurationDays}}" data-ip="{{.IPLimit}}" data-note="{{.Note}}" data-inbounds="{{range $i, $id := .InboundIDs}}{{if $i}},{{end}}{{$id}}{{end}}">{{T $.Lang "common.edit"}}</button>
+          <form method="post" action="/master/panels/{{$.Panel.ID}}/users/templates/{{urlPath .Name}}/delete" class="inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+            <button type="submit" class="btn btn-link btn-link-danger btn-sm">{{T $.Lang "common.delete"}}</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="opacity-60 text-sm">{{T .Lang "panel_templates.empty"}}</p>
+  {{end}}
+
+  <form method="post" action="/master/panels/{{.Panel.ID}}/users/templates" class="card p-6 space-y-4" id="template-save-form">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <h3 class="font-semibold">{{T .Lang "panel_templates.save"}}</h3>
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "panel_templates.name"}}</span>
+      <input name="template_name" id="tpl-name" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.template_name"}}</p>
+    </label>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "panel_users.volume"}}</span>
+        <input name="volume_gb" id="tpl-volume" type="number" value="30" class="form-input">
+        <p class="form-hint">{{T .Lang "form_hint.volume_gb"}}</p>
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "panel_users.duration"}}</span>
+        <input name="duration_days" id="tpl-days" type="number" value="30" class="form-input">
+        <p class="form-hint">{{T .Lang "form_hint.duration_days"}}</p>
+      </label>
+    </div>
+    <label class="form-field">
+      <span class="form-label">IP limit</span>
+      <input name="ip_limit" id="tpl-ip" type="number" value="0" class="form-input">
+      <p class="form-hint">{{T .Lang "form_hint.template_ip"}}</p>
+    </label>
+    {{if .Inbounds}}
+    <div class="form-field">
+      <span class="form-label">{{T .Lang "panel_users.inbound"}}</span>
+      <div class="inbound-grid mt-1" id="tpl-inbound-box">
+        {{range .Inbounds}}
+        <label><input type="checkbox" name="inbound_ids" value="{{.ID}}" class="tpl-inbound-cb"> {{.ID}}: {{.Tag}}</label>
+        {{end}}
+      </div>
+      <p class="form-hint">{{T .Lang "agent_edit.inbound_hint"}}</p>
+    </div>
+    {{end}}
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "panel_users.note"}}</span>
+      <input name="note" id="tpl-note" class="form-input">
+    </label>
+    <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
+  </form>
+</section>
+{{end}}

@@ -121,7 +121,7 @@
           </thead>
           <tbody id="panel-users-tbody">
           {{range .Rows}}
-          {{template "panel_user_row_tr" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF)}}
+          {{template "panel_user_row_tr" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Agents" $.Agents "IsMaster" $.IsMaster)}}
           {{else}}
           <tr><td colspan="7" class="text-center py-10 opacity-60">{{T $.Lang "panel_users.empty"}}</td></tr>
           {{end}}

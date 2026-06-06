@@ -21,8 +21,8 @@
         <div class="flex flex-col sm:items-end gap-2 shrink-0">
           <div class="flex flex-wrap gap-2">
             <a href="/master/panels/{{.ID}}" class="btn btn-secondary btn-sm">{{T $.Lang "common.edit"}}</a>
-            <a href="/master/panels/{{.ID}}/users" class="btn btn-secondary btn-sm">{{T $.Lang "panels.users"}}</a>
-            <a href="/master/panels/{{.ID}}/backups" class="btn btn-secondary btn-sm">{{T $.Lang "panels.backups"}}</a>
+            <a href="/master/panels/{{.ID}}?tab=users" class="btn btn-secondary btn-sm">{{T $.Lang "panels.users"}}</a>
+            <a href="/master/panels/{{.ID}}?tab=backups" class="btn btn-secondary btn-sm">{{T $.Lang "panels.backups"}}</a>
           </div>
           <form class="inline" hx-post="/master/panels/{{.ID}}/test" hx-target="#panel-test-{{.ID}}" hx-swap="innerHTML">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
@@ -49,10 +49,11 @@
     <label class="form-field">
       <span class="form-label">{{T .Lang "panels.name"}}</span>
       <input name="name" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.panel_name"}}</p>
     </label>
     <label class="form-field">
       <span class="form-label">{{T .Lang "panels.panel_type"}}</span>
-      <select name="type" id="panel-type" class="form-select">
+      <select name="type" id="panel-type" class="form-select" data-hint-marzban="{{T .Lang "form_hint.panel_base_url_marzban"}}" data-hint-xui="{{T .Lang "form_hint.panel_base_url_xui"}}">
         <option value="marzban">Marzban</option>
         <option value="xui">3x-ui</option>
       </select>
@@ -60,15 +61,17 @@
     <label class="form-field">
       <span class="form-label">{{T .Lang "panels.base_url"}}</span>
       <input name="base_url" id="panel-base-url" class="form-input" placeholder="https://panel.example.com" required>
-      <p class="form-hint" id="hint-base-url"></p>
+      <p class="form-hint" id="hint-base-url">{{T .Lang "form_hint.panel_base_url_marzban"}}</p>
     </label>
     <label class="form-field xui-field">
       <span class="form-label">{{T .Lang "panels.base_path"}}</span>
       <input name="base_path" id="panel-base-path" class="form-input" placeholder="/a1b2c3d4">
+      <p class="form-hint">{{T .Lang "form_hint.panel_base_path"}}</p>
     </label>
     <label class="form-field">
       <span class="form-label">{{T .Lang "login.username"}}</span>
       <input name="username" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.panel_username"}}</p>
     </label>
     <label class="form-field">
       <span class="form-label">{{T .Lang "panels.password"}}</span>
@@ -77,6 +80,7 @@
     <label class="form-field xui-field">
       <span class="form-label">{{T .Lang "panels.api_token"}}</span>
       <input name="api_token" type="password" class="form-input">
+      <p class="form-hint">{{T .Lang "form_hint.panel_api_token"}}</p>
     </label>
     <button type="submit" class="btn btn-primary" data-busy-text="{{T .Lang "common.loading"}}"><span class="spinner"></span><span class="btn-label">{{T .Lang "panels.add"}}</span></button>
   </form>

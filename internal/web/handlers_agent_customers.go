@@ -199,11 +199,27 @@ func (s *Server) pageAgentPanelCustomers(w http.ResponseWriter, r *http.Request)
 		end = len(rows)
 	}
 	canCreate, _ := s.agentPanelCanCreate(r.Context(), agentID, panelID)
+	createInbounds, _ := s.Store.ListAgentInboundCreateIDs(r.Context(), agentID, panelID)
+	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
+	var inboundRows []panels.InboundInfo
+	if client, err := s.Panels.Get(r.Context(), panelID); err == nil {
+		allInb, _ := client.ListInbounds(r.Context())
+		grantSet := map[int]bool{}
+		for _, id := range createInbounds {
+			grantSet[id] = true
+		}
+		for _, inb := range allInb {
+			if grantSet[inb.ID] {
+				inboundRows = append(inboundRows, inb)
+			}
+		}
+	}
 
 	s.renderPage(w, "agent_panel_customers", r, map[string]any{
 		"Panel": panel, "Rows": rows[start:end], "Filters": f, "Pagination": pag,
 		"CanCreate": canCreate && s.canPerm(r, admin, db.PermCreateUser),
 		"Perms": perms, "ShowCreateModal": r.URL.Query().Get("create") == "1",
+		"CreateInbounds": createInbounds, "InboundRows": inboundRows, "Templates": templates,
 	})
 }
 
@@ -228,9 +244,10 @@ func (s *Server) postAgentPanelUser(w http.ResponseWriter, r *http.Request) {
 	if dur <= 0 {
 		dur = 30
 	}
+	inboundIDs := inboundIDsFromForm(r.Form["inbound_ids"], r.FormValue("inbound_ids"), 0)
 	svc, err := s.Sales.CreateManualService(r.Context(), sales.CreateManualInput{
 		AgentID: agentID, PanelID: panelID, Label: r.FormValue("label"), Contact: r.FormValue("contact"),
-		VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: false,
+		VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: false, InboundIDs: inboundIDs,
 	})
 	if err != nil {
 		s.setFlash(w, "err", friendlySalesErr(lang, err))

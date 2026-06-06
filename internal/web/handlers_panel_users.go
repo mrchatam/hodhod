@@ -14,32 +14,41 @@ import (
 	"github.com/mrchatam/hodhod/internal/panels"
 )
 
+func panelTabURL(panelID int64, tab string) string {
+	return fmt.Sprintf("/master/panels/%d?tab=%s", panelID, tab)
+}
+
 func (s *Server) pagePanelUsers(w http.ResponseWriter, r *http.Request) {
 	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	panel, err := s.Store.GetPanel(r.Context(), panelID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
+	target := panelTabURL(panelID, "users")
+	if q := r.URL.RawQuery; q != "" {
+		target += "&" + q
 	}
+	http.Redirect(w, r, target, http.StatusMovedPermanently)
+}
+
+func (s *Server) loadPanelUsersViewData(r *http.Request, panel *db.Panel) map[string]any {
+	panelID := panel.ID
 	f := s.panelUserFiltersFromRequest(r)
-	pag := paginationFromRequest(r, 0, "q", "inbound", "status", "source", "agent_id")
+	pag := paginationFromRequest(r, 0, "tab", "q", "inbound", "status", "source", "agent_id")
+	if pag.Query["tab"] == "" {
+		pag.Query["tab"] = "users"
+	}
 	agents := s.agentNameMap(r.Context())
 	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
 	allAgents, _ := s.Store.ListAgents(r.Context())
 
 	client, err := s.Panels.Get(r.Context(), panelID)
 	if err != nil {
-		s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, nil, nil, err, map[string]any{
+		return s.panelUsersPageData(r, panel, nil, nil, err, map[string]any{
 			"Stats": panelUserStats{}, "Filters": f, "Templates": templates, "Agents": allAgents,
 			"Pagination": pag, "PanelListErr": err,
-		}))
-		return
+		})
 	}
 	inbounds, _ := client.ListInbounds(r.Context())
 
 	if f.Source == "hodhod" {
-		s.renderPanelUsersHodhodPage(w, r, panel, inbounds, f, pag, agents, templates, allAgents)
-		return
+		return s.panelUsersHodhodData(r, panel, inbounds, f, pag, agents, templates, allAgents)
 	}
 
 	statusFilter := f.Status
@@ -84,15 +93,15 @@ func (s *Server) pagePanelUsers(w http.ResponseWriter, r *http.Request) {
 		stats.PanelCount = page.Total
 	}
 
-	s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, inbounds, rows, panelErr, map[string]any{
+	return s.panelUsersPageData(r, panel, inbounds, rows, panelErr, map[string]any{
 		"Stats": stats, "Filters": f, "Templates": templates, "Agents": allAgents,
 		"PanelListErr": panelErr, "Pagination": pag,
 		"PanelEmptyHint": panelErr == nil && len(rows) == 0 && apiPage != nil && apiPage.Total == 0,
 		"CanDelDepleted": panel.Type == db.PanelXUI,
-	}))
+	})
 }
 
-func (s *Server) renderPanelUsersHodhodPage(w http.ResponseWriter, r *http.Request, panel *db.Panel, inbounds []panels.InboundInfo, f panelUserFilters, pag Pagination, agents map[int64]string, templates []UserCreateTemplate, allAgents []db.Agent) {
+func (s *Server) panelUsersHodhodData(r *http.Request, panel *db.Panel, inbounds []panels.InboundInfo, f panelUserFilters, pag Pagination, agents map[int64]string, templates []UserCreateTemplate, allAgents []db.Agent) map[string]any {
 	allSvc, _ := s.Store.ListServicesForPanel(r.Context(), panel.ID)
 	var hodhodOnly []db.Service
 	for _, svc := range allSvc {
@@ -137,10 +146,15 @@ func (s *Server) renderPanelUsersHodhodPage(w http.ResponseWriter, r *http.Reque
 		rows = append(rows, row)
 	}
 	stats := panelUserStats{HodhodCount: len(hodhodOnly), Shown: len(rows), PanelCount: len(panelUsers)}
-	s.renderPage(w, "panel_users", r, s.panelUsersPageData(r, panel, inbounds, rows, nil, map[string]any{
+	return s.panelUsersPageData(r, panel, inbounds, rows, nil, map[string]any{
 		"Stats": stats, "Filters": f, "Templates": templates, "Agents": allAgents,
 		"Pagination": pag,
-	}))
+	})
+}
+
+func (s *Server) renderPanelUsersHodhodPage(w http.ResponseWriter, r *http.Request, panel *db.Panel, inbounds []panels.InboundInfo, f panelUserFilters, pag Pagination, agents map[int64]string, templates []UserCreateTemplate, allAgents []db.Agent) {
+	data := s.panelUsersHodhodData(r, panel, inbounds, f, pag, agents, templates, allAgents)
+	s.renderPage(w, "panel_edit", r, data)
 }
 
 func (s *Server) panelUsersPageData(r *http.Request, panel *db.Panel, inbounds []panels.InboundInfo, rows []PanelUserRow, panelErr error, extra ...map[string]any) map[string]any {
@@ -148,6 +162,8 @@ func (s *Server) panelUsersPageData(r *http.Request, panel *db.Panel, inbounds [
 		"Panel": panel, "Inbounds": inbounds, "Rows": rows,
 		"PanelListErr": panelErr,
 	}
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	data["IsMaster"] = admin != nil && admin.Role == db.RoleMaster
 	if len(extra) > 0 {
 		for k, v := range extra[0] {
 			data[k] = v
@@ -264,12 +280,12 @@ func (s *Server) postPanelUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Header.Get("HX-Request") != "" {
-		w.Header().Set("HX-Redirect", fmt.Sprintf("/master/panels/%d/users", panelID))
+		w.Header().Set("HX-Redirect", panelTabURL(panelID, "users"))
 		s.setFlash(w, "ok", "User created on panel")
 		return
 	}
 	s.saveFlash(w, nil, "User created on panel")
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 }
 
 func (s *Server) panelUserCreateResponse(w http.ResponseWriter, r *http.Request, panelID int64, err error, msg string) {
@@ -279,7 +295,7 @@ func (s *Server) panelUserCreateResponse(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	s.setFlash(w, "err", msg)
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 }
 
 func templateEscape(s string) string {
@@ -302,7 +318,7 @@ func (s *Server) postPanelUserTemplate(w http.ResponseWriter, r *http.Request) {
 	} else {
 		s.setFlash(w, "ok", "Template saved")
 	}
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "templates"), http.StatusSeeOther)
 }
 
 func (s *Server) postPanelUserTemplateDelete(w http.ResponseWriter, r *http.Request) {
@@ -313,7 +329,7 @@ func (s *Server) postPanelUserTemplateDelete(w http.ResponseWriter, r *http.Requ
 	} else {
 		s.setFlash(w, "ok", "Template deleted")
 	}
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "templates"), http.StatusSeeOther)
 }
 
 func atoiDefault(s string, def int) int {
@@ -343,7 +359,7 @@ func (s *Server) panelUserAction(w http.ResponseWriter, r *http.Request, fn func
 			return
 		}
 		s.setFlash(w, "err", err.Error())
-		http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+		http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 		return
 	}
 	if r.Header.Get("HX-Request") != "" {
@@ -351,7 +367,7 @@ func (s *Server) panelUserAction(w http.ResponseWriter, r *http.Request, fn func
 		return
 	}
 	s.setFlash(w, "ok", "Done")
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 }
 
 func (s *Server) panelUserHTMLError(w http.ResponseWriter, msg string) {
@@ -393,9 +409,13 @@ func (s *Server) renderPanelUserRow(w http.ResponseWriter, r *http.Request, pane
 	}
 	data := map[string]any{
 		"CSRF": r.Context().Value(ctxCSRF), "Panel": panel, "Row": row, "InboundTagMap": tagMap,
+		"Agents": s.agentNameMap(r.Context()), "IsMaster": true,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	t, ok := s.pages["panel_users"]
+	t, ok := s.pages["panel_edit"]
+	if !ok {
+		t = s.pages["panel_users"]
+	}
 	if !ok {
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
@@ -447,6 +467,38 @@ func (s *Server) postPanelUserEnable(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) postPanelUserAttachAgent(w http.ResponseWriter, r *http.Request) {
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	email := s.panelUserEmail(r)
+	_ = r.ParseForm()
+	agentID, _ := strconv.ParseInt(r.FormValue("agent_id"), 10, 64)
+	redirect := panelTabURL(panelID, "users")
+	if agentID <= 0 || email == "" {
+		s.setFlash(w, "err", "Select an agent")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	ok, err := s.Store.AgentHasPanel(r.Context(), agentID, panelID)
+	if err != nil || !ok {
+		s.setFlash(w, "err", "Panel not assigned to agent")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	n, err := s.attachPanelUsersToAgent(r.Context(), agentID, panelID, []string{email})
+	if err != nil {
+		s.saveFlash(w, err, "")
+	} else if n == 0 {
+		s.setFlash(w, "err", "Could not attach user")
+	} else {
+		s.setFlash(w, "ok", "User attached to agent")
+	}
+	if r.Header.Get("HX-Request") != "" {
+		s.renderPanelUserRow(w, r, panelID, email)
+		return
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
 func (s *Server) postPanelUserDelete(w http.ResponseWriter, r *http.Request) {
 	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	email := s.panelUserEmail(r)
@@ -464,7 +516,7 @@ func (s *Server) postPanelUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setFlash(w, "ok", "User deleted")
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 }
 
 func (s *Server) postPanelUsersDelDepleted(w http.ResponseWriter, r *http.Request) {
@@ -482,11 +534,11 @@ func (s *Server) postPanelUsersDelDepleted(w http.ResponseWriter, r *http.Reques
 	n, err := cleaner.DeleteDepletedClients(r.Context())
 	if err != nil {
 		s.setFlash(w, "err", err.Error())
-		http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+		http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 		return
 	}
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
 	s.audit(r, &admin.ID, "del_depleted_clients", "panel", panelID, map[string]any{"deleted": n})
 	s.setFlash(w, "ok", fmt.Sprintf("Removed %d depleted clients", n))
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/users", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "users"), http.StatusSeeOther)
 }

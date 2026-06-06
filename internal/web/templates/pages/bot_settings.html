@@ -24,15 +24,15 @@
 <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
   <input type="hidden" name="tab" value="general">
-  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.new_token"}}</span><input name="token" type="password" class="form-input" placeholder="{{T .Lang "panel_edit.keep_current"}}"></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.new_token"}}</span><input name="token" type="password" class="form-input" placeholder="{{T .Lang "panel_edit.keep_current"}}"><p class="form-hint">{{T .Lang "form_hint.bot_token_rotate"}}</p></label>
   <label class="form-field"><span class="form-label">{{T .Lang "common.status"}}</span>
     <select name="status" class="form-select">
       <option value="active" {{if eq .Bot.Status "active"}}selected{{end}}>{{T .Lang "status.active"}}</option>
       <option value="disabled" {{if eq .Bot.Status "disabled"}}selected{{end}}>{{T .Lang "status.disabled"}}</option>
     </select>
   </label>
-  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.warn_percent"}}</span><input name="warn_percent" value="{{index .Settings "warn_percent"}}" class="form-input"></label>
-  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.currency"}}</span><input name="currency" value="{{index .Settings "currency"}}" class="form-input"></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.warn_percent"}}</span><input name="warn_percent" value="{{index .Settings "warn_percent"}}" class="form-input"><p class="form-hint">{{T .Lang "form_hint.bot_warn_percent"}}</p></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.currency"}}</span><input name="currency" value="{{index .Settings "currency"}}" class="form-input"><p class="form-hint">{{T .Lang "form_hint.bot_currency"}}</p></label>
   <label class="form-field"><span class="form-label">Card display mode</span>
     <select name="card_display_mode" class="form-select">
       <option value="random" {{if eq .Bot.CardDisplayMode "random"}}selected{{end}}>random</option>
@@ -40,6 +40,7 @@
       <option value="round_robin" {{if eq .Bot.CardDisplayMode "round_robin"}}selected{{end}}>round_robin</option>
       <option value="fixed_order" {{if eq .Bot.CardDisplayMode "fixed_order"}}selected{{end}}>fixed_order</option>
     </select>
+    <p class="form-hint">{{T .Lang "form_hint.bot_card_mode"}}</p>
   </label>
   <label class="form-field"><span class="form-label">Trial enabled</span><input type="checkbox" name="trial_enabled" value="true" {{if eq (index .Settings "trial_enabled") "true"}}checked{{end}}></label>
   <label class="form-field"><span class="form-label">Trial max per user</span><input name="trial_max_per_user" value="{{index .Settings "trial_max_per_user"}}" class="form-input"></label>
@@ -54,7 +55,7 @@
   <label class="form-field"><span class="form-label">Welcome (EN)</span><textarea name="welcome_text_en" class="form-textarea" rows="2">{{index .Settings "welcome_text_en"}}</textarea></label>
   <label class="form-field"><span class="form-label">Help (FA)</span><textarea name="help_text_fa" class="form-textarea" rows="2">{{index .Settings "help_text_fa"}}</textarea></label>
   <label class="form-field"><span class="form-label">Help (EN)</span><textarea name="help_text_en" class="form-textarea" rows="2">{{index .Settings "help_text_en"}}</textarea></label>
-  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.support_contact"}}</span><input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input"></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.support_contact"}}</span><input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input"><p class="form-hint">{{T .Lang "form_hint.bot_support"}}</p></label>
   <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
 {{end}}
@@ -80,9 +81,9 @@
   </li>{{else}}<li class="opacity-60">{{T .Lang "empty.default"}}</li>{{end}}</ul>
   <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/channels" class="card p-6 space-y-4">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <label class="form-field"><span class="form-label">Username</span><input name="username" class="form-input" placeholder="@channel" required></label>
+    <label class="form-field"><span class="form-label">Username</span><input name="username" class="form-input" placeholder="@channel" required><p class="form-hint">{{T .Lang "form_hint.bot_channel_user"}}</p></label>
     <label class="form-field"><span class="form-label">Label</span><input name="label" class="form-input"></label>
-    <label class="form-field"><span class="form-label">Join URL</span><input name="join_url" class="form-input" placeholder="https://t.me/..."></label>
+    <label class="form-field"><span class="form-label">Join URL</span><input name="join_url" class="form-input" placeholder="https://t.me/..."><p class="form-hint">{{T .Lang "form_hint.bot_channel_url"}}</p></label>
     <label class="flex items-center gap-2"><input type="checkbox" name="mandatory" checked> Mandatory</label>
     <label class="flex items-center gap-2"><input type="checkbox" name="active" checked> Active</label>
     <button type="submit" class="btn btn-primary">{{T .Lang "common.add"}}</button>
@@ -119,8 +120,8 @@
 {{if eq .Tab "notify"}}
 <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="tab" value="notify">
-  <label class="form-field"><span class="form-label">{{T .Lang "bots.approver_id"}}</span><input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123,456"></label>
-  <label class="form-field"><span class="form-label">Expiry warn lead (days)</span><input name="expiry_warn_days" value="{{index .Settings "expiry_warn_days"}}" class="form-input" placeholder="2"></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "bots.approver_id"}}</span><input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123,456"><p class="form-hint">{{T .Lang "form_hint.bot_approver"}}</p></label>
+  <label class="form-field"><span class="form-label">Expiry warn lead (days)</span><input name="expiry_warn_days" value="{{index .Settings "expiry_warn_days"}}" class="form-input" placeholder="2"><p class="form-hint">{{T .Lang "form_hint.bot_expiry_warn"}}</p></label>
   <label class="flex items-center gap-2"><input type="checkbox" name="notify_receipt_pending" value="true" {{if eq (index .Settings "notify_receipt_pending") "true"}}checked{{end}}> Notify receipt pending</label>
   <label class="flex items-center gap-2"><input type="checkbox" name="notify_purchase" value="true" {{if eq (index .Settings "notify_purchase") "true"}}checked{{end}}> Notify purchase</label>
   <label class="flex items-center gap-2"><input type="checkbox" name="notify_new_user" value="true" {{if eq (index .Settings "notify_new_user") "true"}}checked{{end}}> Notify new user</label>
@@ -131,12 +132,56 @@
 
 {{if and (eq .Tab "panels") .Caps.ShowPanelsTab}}
 <h3 class="text-lg font-semibold mb-3">{{T .Lang "bot_settings.panel_assignment"}}</h3>
-<ul class="text-sm space-y-2 mb-4">{{range .BotPanels}}<li class="card p-2">{{T $.Lang "table.panel"}} {{.PanelID}}</li>{{else}}<li class="opacity-60">{{T .Lang "bot_settings.no_panels"}}</li>{{end}}</ul>
-<form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="card p-6 space-y-4 max-w-lg">
+<ul class="text-sm space-y-2 mb-4">
+  {{range .BotPanelRows}}
+  <li class="card p-3 flex flex-wrap justify-between items-center gap-2">
+    <div>
+      <span class="font-medium">{{.PanelName}}</span>
+      {{if .InboundLabels}}
+      <span class="text-xs opacity-60 ml-2">{{range .InboundLabels}}<span class="badge badge-muted mr-1">{{.}}</span>{{end}}</span>
+      {{else}}<span class="text-xs opacity-60 ml-2">{{T $.Lang "bot_settings.all_inbounds"}}</span>{{end}}
+    </div>
+    <form method="post" action="/master/bots/{{$.Bot.ID}}/bot-panels/{{.PanelID}}/delete">
+      <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+      <button type="submit" class="btn btn-link btn-link-danger btn-sm">{{T $.Lang "common.delete"}}</button>
+    </form>
+  </li>
+  {{else}}<li class="opacity-60">{{T .Lang "bot_settings.no_panels"}}</li>{{end}}
+</ul>
+
+{{if not .AgentPanels}}
+<div class="card p-6 max-w-lg">
+  <p class="text-sm opacity-80">{{T .Lang "bot_settings.no_agent_panels"}}</p>
+  <a href="/master/agents/{{.Bot.AgentID}}#tab-panels" class="btn btn-secondary btn-sm mt-3">{{T .Lang "bot_settings.assign_agent_panel_first"}}</a>
+</div>
+{{else}}
+<form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="card p-6 space-y-4 max-w-lg" id="bot-panel-assign-form">
   <input type="hidden" name="_csrf" value="{{.CSRF}}">
-  <label class="form-field"><span class="form-label">{{T .Lang "table.panel"}}</span><select name="panel_id" class="form-select">{{range .AgentPanels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
-  <label class="form-field"><span class="form-label">{{T .Lang "agent_edit.inbound_ids"}}</span><input name="inbound_ids" class="form-input" placeholder="1, 2"></label>
+  <label class="form-field">
+    <span class="form-label">{{T .Lang "table.panel"}}</span>
+    <select name="panel_id" id="bot-assign-panel" class="form-select" required>
+      <option value="">{{T .Lang "bot_settings.select_panel"}}</option>
+      {{range .AgentPanels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+    <p class="form-hint">{{T .Lang "bot_settings.panel_select_hint"}}</p>
+  </label>
+  {{range .AssignPanelOptions}}
+  <div class="bot-panel-inbounds hidden space-y-2" data-panel-id="{{.Panel.ID}}">
+    {{if .Inbounds}}
+    <p class="form-label">{{T $.Lang "panel_users.inbound"}}</p>
+    <div class="inbound-grid">
+      {{range .Inbounds}}
+      <label><input type="checkbox" name="inbound_ids" value="{{.ID}}" class="inbound-cb"> {{.ID}}: {{.Tag}}</label>
+      {{end}}
+    </div>
+    <p class="form-hint">{{T $.Lang "agent_edit.inbound_hint"}}</p>
+    {{else}}
+    <p class="text-sm opacity-60">{{T $.Lang "panel_users.list_err_hint"}}</p>
+    {{end}}
+  </div>
+  {{end}}
   <button type="submit" class="btn btn-primary">{{T .Lang "bot_settings.assign_panel"}}</button>
 </form>
+{{end}}
 {{end}}
 {{end}}

@@ -77,12 +77,28 @@
   <form method="post" action="/agent/plans" class="card p-6 space-y-4 h-fit hidden md:block">
     <h3 class="font-semibold">{{T .Lang "agent_plans.add"}}</h3>
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <select name="bot_id" class="form-select">{{range .Bots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}</select>
-    <select name="panel_id" class="form-select">{{range .PanelOptions}}<option value="{{.PanelID}}">{{T $.Lang "table.bot"}} {{.BotID}} → {{.PanelName}}</option>{{end}}</select>
-    <input name="name" placeholder="{{T .Lang "agent_plans.plan_name"}}" class="form-input" required>
-    <input name="volume_gb" type="number" placeholder="{{T .Lang "agent_plans.volume_ph"}}" class="form-input" required>
-    <input name="duration_days" type="number" placeholder="{{T .Lang "agent_plans.duration_ph"}}" class="form-input" required>
-    <input name="price_toman" type="number" placeholder="{{T .Lang "agent_plans.price_ph"}}" class="form-input" required>
+    <label class="form-field">
+      <select name="bot_id" class="form-select">{{range .Bots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}</select>
+      <p class="form-hint">{{T .Lang "form_hint.plan_bot"}}</p>
+    </label>
+    <label class="form-field">
+      <select name="panel_id" class="form-select">{{range .PanelOptions}}<option value="{{.PanelID}}">{{T $.Lang "table.bot"}} {{.BotID}} → {{.PanelName}}</option>{{end}}</select>
+    </label>
+    <label class="form-field">
+      <input name="name" placeholder="{{T .Lang "agent_plans.plan_name"}}" class="form-input" required>
+    </label>
+    <label class="form-field">
+      <input name="volume_gb" type="number" placeholder="{{T .Lang "agent_plans.volume_ph"}}" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.plan_volume"}}</p>
+    </label>
+    <label class="form-field">
+      <input name="duration_days" type="number" placeholder="{{T .Lang "agent_plans.duration_ph"}}" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.plan_duration"}}</p>
+    </label>
+    <label class="form-field">
+      <input name="price_toman" type="number" placeholder="{{T .Lang "agent_plans.price_ph"}}" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.plan_price"}}</p>
+    </label>
     <button type="submit" class="btn btn-primary">{{T .Lang "agent_plans.add"}}</button>
   </form>
 </div>

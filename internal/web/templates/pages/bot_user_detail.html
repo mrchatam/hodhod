@@ -15,8 +15,8 @@
     {{end}}
     <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/users/{{.User.ID}}/wallet/adjust" class="space-y-2 pt-4 border-t" style="border-color:var(--color-border)">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
-      <label class="form-field"><span class="form-label">Adjust (+/- Toman)</span><input name="delta" class="form-input" placeholder="10000 or -5000"></label>
-      <label class="form-field"><span class="form-label">Reason</span><input name="reason" class="form-input"></label>
+      <label class="form-field"><span class="form-label">Adjust (+/- Toman)</span><input name="delta" class="form-input" placeholder="10000 or -5000"><p class="form-hint">{{T .Lang "form_hint.wallet_adjust"}}</p></label>
+      <label class="form-field"><span class="form-label">Reason</span><input name="reason" class="form-input"><p class="form-hint">{{T .Lang "form_hint.wallet_reason"}}</p></label>
       <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.save"}}</button>
     </form>
   </div>

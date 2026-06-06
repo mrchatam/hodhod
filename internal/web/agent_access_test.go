@@ -42,8 +42,8 @@ func TestAgentCanModifyUser_viewOnlyGrant(t *testing.T) {
 
 func TestAgentCanModifyUser_inboundVisible(t *testing.T) {
 	v := agentVisibleUser{InboundVisible: true}
-	if !agentCanModifyUser(v, true) {
-		t.Fatal("inbound visible user should be modifiable with perm")
+	if agentCanModifyUser(v, true) {
+		t.Fatal("inbound visible alone should not allow modify without explicit grant")
 	}
 }
 

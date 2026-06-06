@@ -1,0 +1,52 @@
+{{define "panel_tab_bots"}}
+<section class="space-y-6 max-w-2xl">
+  <div class="card p-5">
+    <h3 class="font-semibold mb-3">{{T .Lang "panel_edit.bot_assignments"}}</h3>
+    {{if .BotRows}}
+    <ul class="space-y-2">{{range .BotRows}}
+      <li class="card p-3 flex justify-between items-center text-sm">
+        <span><a href="/master/bots/{{.BotID}}/settings" class="text-brand-600">@{{.BotUsername}}</a> · {{T $.Lang "table.agent"}} {{.AgentID}}</span>
+        <form method="post" action="/master/panels/{{$.Panel.ID}}/bots/{{.BotID}}/delete">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-link btn-link-danger btn-sm">{{T $.Lang "common.delete"}}</button>
+        </form>
+      </li>
+    {{end}}</ul>
+    {{else}}<p class="opacity-60 text-sm">{{T .Lang "panel_edit.no_bots"}}</p>{{end}}
+  </div>
+
+  {{if not .AgentRows}}
+  <div class="card p-6">
+    <p class="text-sm opacity-80">{{T .Lang "panel_edit.assign_agent_first"}}</p>
+  </div>
+  {{else if not .AssignBots}}
+  <div class="card p-6">
+    <p class="text-sm opacity-80">{{T .Lang "panel_edit.no_bots_for_agents"}}</p>
+  </div>
+  {{else}}
+  <form method="post" action="/master/panels/{{.Panel.ID}}/bots" class="card p-6 space-y-4">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "nav.bots"}}</span>
+      <select name="bot_id" class="form-select" required>
+        <option value="">{{T .Lang "bot_settings.select_panel"}}</option>
+        {{range .AssignBots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}
+      </select>
+      <p class="form-hint">{{T .Lang "panel_edit.link_bot_hint"}}</p>
+    </label>
+    {{if .Inbounds}}
+    <div class="form-field">
+      <span class="form-label">{{T .Lang "panel_users.inbound"}}</span>
+      <div class="inbound-grid mt-1">
+        {{range .Inbounds}}
+        <label><input type="checkbox" name="inbound_ids" value="{{.ID}}"> {{.ID}}: {{.Tag}}</label>
+        {{end}}
+      </div>
+      <p class="form-hint">{{T .Lang "agent_edit.inbound_hint"}}</p>
+    </div>
+    {{end}}
+    <button type="submit" class="btn btn-primary">{{T .Lang "bot_settings.assign_panel"}}</button>
+  </form>
+  {{end}}
+</section>
+{{end}}

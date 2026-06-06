@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/mrchatam/hodhod/internal/db"
 	"github.com/mrchatam/hodhod/internal/panels"
@@ -146,12 +149,7 @@ func agentCanModifyUser(v agentVisibleUser, hasPerm bool) bool {
 		if v.UserGrant.AllowModify {
 			return true
 		}
-		if v.UserGrant.AllowView {
-			return false
-		}
-	}
-	if v.InboundVisible {
-		return true
+		return false
 	}
 	return false
 }
@@ -187,4 +185,84 @@ func (s *Server) agentPanelCanCreate(ctx context.Context, agentID, panelID int64
 		scope.InboundIDs = []int{scope.InboundID}
 	}
 	return len(scope.InboundIDs) > 0, nil
+}
+
+func parseInboundGrantsFromForm(form url.Values) []db.AgentInboundGrant {
+	var inboundGrants []db.AgentInboundGrant
+	for key, val := range form {
+		if !strings.HasPrefix(key, "inbound_") || len(val) == 0 || val[0] != "on" {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(key, "inbound_"), "_")
+		if len(parts) != 2 {
+			continue
+		}
+		inboundID, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		g := db.AgentInboundGrant{InboundID: inboundID}
+		switch parts[1] {
+		case "create":
+			g.AllowCreate = true
+		case "view":
+			g.AllowViewUsers = true
+		default:
+			continue
+		}
+		found := false
+		for i := range inboundGrants {
+			if inboundGrants[i].InboundID == inboundID {
+				if parts[1] == "create" {
+					inboundGrants[i].AllowCreate = true
+				} else {
+					inboundGrants[i].AllowViewUsers = true
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			inboundGrants = append(inboundGrants, g)
+		}
+	}
+	return inboundGrants
+}
+
+func (s *Server) attachPanelUsersToAgent(ctx context.Context, agentID, panelID int64, usernames []string) (int, error) {
+	client, err := s.Panels.Get(ctx, panelID)
+	if err != nil {
+		return 0, err
+	}
+	attached := 0
+	for _, username := range usernames {
+		if username == "" {
+			continue
+		}
+		if err := s.Store.UpsertAgentUserGrant(ctx, &db.AgentUserGrant{
+			AgentID: agentID, PanelID: panelID, PanelUsername: username,
+			AllowView: true, AllowModify: true,
+		}); err != nil {
+			return attached, err
+		}
+		if _, err := s.Store.GetServiceByPanelUsername(ctx, panelID, username); err != nil {
+			sub, _ := client.SubscriptionURL(ctx, username)
+			u, uerr := client.GetUser(ctx, username)
+			svc := &db.Service{
+				AgentID: agentID, Source: db.ServiceSourcePanel, PanelID: panelID,
+				PanelUsername: username, SubLink: sub, Status: "active",
+			}
+			if uerr == nil {
+				svc.DataLimitBytes = u.DataLimitBytes
+				svc.UsedBytes = u.UsedBytes
+				if !u.ExpireAt.IsZero() {
+					t := u.ExpireAt
+					svc.ExpireAt = &t
+				}
+			}
+			_ = s.Store.CreateService(ctx, svc)
+		}
+		attached++
+	}
+	return attached, nil
 }

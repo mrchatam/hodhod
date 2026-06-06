@@ -37,6 +37,7 @@ type CreateManualInput struct {
 	CustomerID   *int64
 	VolumeGB     int
 	DurationDays int
+	InboundIDs   []int
 	AdminID      int64
 	IsMaster     bool
 }
@@ -144,6 +145,24 @@ func (s *Service) CreateManualService(ctx context.Context, in CreateManualInput)
 	scope, ap, err := s.loadCreateScope(ctx, in.AgentID, in.PanelID, in.IsMaster)
 	if err != nil {
 		return nil, err
+	}
+	if !in.IsMaster {
+		if len(in.InboundIDs) > 0 {
+			granted := map[int]bool{}
+			for _, id := range scope.InboundIDs {
+				granted[id] = true
+			}
+			var picked []int
+			for _, id := range in.InboundIDs {
+				if !granted[id] {
+					return nil, ErrNoCreateInbound
+				}
+				picked = append(picked, id)
+			}
+			scope = panels.Scope{InboundIDs: picked}
+		} else if len(scope.InboundIDs) > 1 {
+			return nil, fmt.Errorf("sales: select an inbound")
+		}
 	}
 	limitBytes := int64(in.VolumeGB) * 1024 * 1024 * 1024
 	if err := s.enforceQuota(ctx, in.AgentID, in.PanelID, ap, limitBytes, in.DurationDays); err != nil {

@@ -39,15 +39,18 @@
     <label class="form-field">
       <span class="form-label">{{T .Lang "table.agent"}}</span>
       <select name="agent_id" class="form-select">{{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+      <p class="form-hint">{{T .Lang "form_hint.bots_agent"}}</p>
     </label>
     {{end}}
     <label class="form-field">
       <span class="form-label">{{T .Lang "bots.token"}}</span>
       <input name="token" class="form-input" placeholder="123456789:AAH..." required>
+      <p class="form-hint">{{T .Lang "form_hint.bots_token"}}</p>
     </label>
     <label class="form-field">
       <span class="form-label">{{T .Lang "bots.approver_id"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></span>
       <input name="approver_tg_id" class="form-input" placeholder="123456789">
+      <p class="form-hint">{{T .Lang "form_hint.bots_approver"}}</p>
     </label>
     <button type="submit" class="btn btn-primary">{{T .Lang "bots.add"}}</button>
   </form>

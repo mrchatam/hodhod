@@ -14,6 +14,7 @@
     <select name="agent_id" class="form-select" required>
       {{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
     </select>
+    <p class="form-hint">{{T .Lang "form_hint.service_agent"}}</p>
   </label>
   {{end}}
   <label class="form-field">
@@ -21,10 +22,12 @@
     <select name="panel_id" class="form-select" required>
       {{range .Panels}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
     </select>
+    <p class="form-hint">{{T .Lang "form_hint.service_panel"}}</p>
   </label>
   <label class="form-field">
     <span class="form-label">{{T .Lang "service_create.label"}}</span>
     <input name="label" class="form-input" placeholder="{{T .Lang "service_create.label"}}">
+    <p class="form-hint">{{T .Lang "form_hint.service_label"}}</p>
   </label>
   <label class="form-field">
     <span class="form-label">{{T .Lang "service_create.contact"}} <span class="opacity-60 font-normal">({{T .Lang "common.optional"}})</span></span>
@@ -34,10 +37,12 @@
     <label class="form-field">
       <span class="form-label">{{T .Lang "service_create.volume"}}</span>
       <input name="volume_gb" type="number" min="1" value="30" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.volume_gb"}}</p>
     </label>
     <label class="form-field">
       <span class="form-label">{{T .Lang "service_create.duration"}}</span>
       <input name="duration_days" type="number" min="1" value="30" class="form-input" required>
+      <p class="form-hint">{{T .Lang "form_hint.duration_days"}}</p>
     </label>
   </div>
   <button type="submit" class="btn btn-primary">{{T .Lang "common.create"}}</button>

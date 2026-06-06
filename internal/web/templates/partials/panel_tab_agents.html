@@ -1,0 +1,53 @@
+{{define "panel_tab_agents"}}
+<section class="space-y-6">
+  <div class="card p-5">
+    <h3 class="font-semibold mb-3">{{T .Lang "panel_edit.agent_assignments"}}</h3>
+    {{if .AgentRows}}
+    <ul class="space-y-2">{{range .AgentRows}}
+      <li class="text-sm"><a href="/master/agents/{{.AgentID}}" class="text-brand-600">{{.AgentName}}</a> · {{.MaxUsers}} · {{.ExpiryCap}}d</li>
+    {{end}}</ul>
+    {{else}}<p class="opacity-60 text-sm">{{T .Lang "panel_edit.not_assigned"}}</p>{{end}}
+  </div>
+
+  <form method="post" action="/master/panels/{{.Panel.ID}}/agents" class="card p-6 space-y-4 max-w-2xl" id="panel-agent-assign-form">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <h3 class="font-semibold">{{T .Lang "agent_edit.assign_panel"}}</h3>
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "table.agent"}}</span>
+      <select name="agent_id" id="panel-assign-agent" class="form-select" required>
+        <option value="">{{T .Lang "bot_settings.select_panel"}}</option>
+        {{range .AllAgents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+      </select>
+      <p class="form-hint">{{T .Lang "panel_edit.assign_agent_hint"}}</p>
+    </label>
+    {{if .Inbounds}}
+    <div class="overflow-x-auto">
+      <table class="data-table text-sm">
+        <thead><tr><th>{{T .Lang "panel_users.inbound"}}</th><th>{{T .Lang "access.allow_create"}}</th><th>{{T .Lang "access.allow_view_users"}}</th></tr></thead>
+        <tbody>
+        {{range .Inbounds}}
+        <tr>
+          <td>{{.ID}}: {{.Tag}}</td>
+          <td><input type="checkbox" name="inbound_{{.ID}}_create"></td>
+          <td><input type="checkbox" name="inbound_{{.ID}}_view"></td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+      <p class="form-hint mt-2">{{T .Lang "agent_edit.inbound_hint"}}</p>
+    </div>
+    {{end}}
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "agent_edit.max_users"}}</span>
+      <input name="max_users" type="number" class="form-input" placeholder="{{T .Lang "agent_edit.unlimited"}}">
+      <p class="form-hint">{{T .Lang "agent_edit.max_users_hint"}}</p>
+    </label>
+    <label class="form-field">
+      <span class="form-label">{{T .Lang "agent_edit.max_duration"}}</span>
+      <input name="expiry_cap_days" type="number" class="form-input">
+      <p class="form-hint">{{T .Lang "agent_edit.max_duration_hint"}}</p>
+    </label>
+    <button type="submit" class="btn btn-primary">{{T .Lang "agent_edit.assign_panel"}}</button>
+  </form>
+</section>
+{{end}}

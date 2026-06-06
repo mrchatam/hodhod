@@ -1,0 +1,75 @@
+{{define "panel_tab_backups"}}
+<section class="space-y-6">
+  {{if not .SupportsBackup}}
+  <div class="alert-info">{{T .Lang "panel_backups.not_supported"}}</div>
+  {{else}}
+  <form method="post" action="/master/panels/{{.Panel.ID}}/backups/run">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <button type="submit" class="btn btn-primary">{{T .Lang "panel_backups.backup_now"}}</button>
+  </form>
+  {{end}}
+
+  <div class="grid lg:grid-cols-2 gap-6">
+    <div class="card desktop-table overflow-hidden">
+      <h3 class="font-semibold p-4 border-b border-[var(--color-border)]">{{T .Lang "panel_backups.stored"}}</h3>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>{{T .Lang "panel_backups.date"}}</th>
+              <th>{{T .Lang "common.size"}}</th>
+              <th>{{T .Lang "common.status"}}</th>
+              <th class="text-end">{{T .Lang "common.actions"}}</th>
+            </tr>
+          </thead>
+          <tbody>
+          {{range .Backups}}
+          <tr>
+            <td>{{time .CreatedAt}}</td>
+            <td>{{gib .SizeBytes}}</td>
+            <td><span class="badge {{if eq .Status "ok"}}badge-active{{else}}badge-disabled{{end}}">{{.Status}}</span></td>
+            <td class="text-end">
+              {{if eq .Status "ok"}}<a href="/master/panels/{{$.Panel.ID}}/backups/{{.ID}}/download" class="btn btn-secondary btn-sm">{{T $.Lang "common.download"}}</a>{{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" class="text-center py-10 opacity-60">{{T $.Lang "panel_backups.empty"}}</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <form method="post" action="/master/panels/{{.Panel.ID}}/backups/settings" class="card p-6 space-y-4 h-fit">
+      <h3 class="font-semibold">{{T .Lang "panel_backups.settings"}}</h3>
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="backup_enabled" {{if eq (index .Settings "backup_enabled") "1"}}checked{{end}}>
+        {{T .Lang "panel_backups.enable_scheduled"}}
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "panel_backups.cron"}}</span>
+        <input name="backup_cron" value="{{index .Settings "backup_cron"}}" class="form-input" placeholder="0 3 * * *">
+        <p class="form-hint">{{T .Lang "panel_backups.cron_hint"}}</p>
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "panel_backups.retention"}}</span>
+        <input name="backup_retention" type="number" value="{{index .Settings "backup_retention"}}" class="form-input" min="1">
+        <p class="form-hint">{{T .Lang "form_hint.backup_retention"}}</p>
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "panel_backups.tg_token"}}</span>
+        <input name="backup_tg_bot_token" type="password" class="form-input" placeholder="{{T .Lang "panel_edit.keep_current"}}">
+      </label>
+      <label class="form-field">
+        <span class="form-label">{{T .Lang "panel_backups.tg_chat"}}</span>
+        <input name="backup_tg_chat_id" value="{{index .Settings "backup_tg_chat_id"}}" class="form-input" placeholder="-1001234567890">
+        <p class="form-hint">{{T .Lang "form_hint.backup_tg_chat"}}</p>
+      </label>
+      <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
+    </form>
+  </div>
+
+  {{template "pagination" .}}
+</section>
+{{end}}

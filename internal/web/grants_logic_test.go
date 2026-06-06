@@ -21,7 +21,7 @@ func TestGrantToggleCombinations(t *testing.T) {
 		{
 			name:    "inbound view no create grant",
 			v:       agentVisibleUser{InboundVisible: true},
-			canView: true, canMod: true,
+			canView: true, canMod: false,
 		},
 		{
 			name: "inbound create on view off pre-existing hidden",

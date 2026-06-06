@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/botconfig"
 	"github.com/mrchatam/hodhod/internal/db"
+	"github.com/mrchatam/hodhod/internal/panels"
 	"github.com/mrchatam/hodhod/internal/telegram"
 )
 
@@ -128,8 +130,22 @@ func (s *Server) pageBotSettings(w http.ResponseWriter, r *http.Request) {
 		"MenuButtons": mustMenu(r, s, id),
 	}
 	if caps.ShowPanelsTab {
-		data["BotPanels"], _ = s.Store.ListBotPanels(r.Context(), id)
-		data["AgentPanels"], _ = s.Store.ListPanelsForAgent(r.Context(), bot.AgentID)
+		data["BotPanelRows"] = s.botPanelRows(r, id)
+		agentPanels, _ := s.Store.ListPanelsForAgent(r.Context(), bot.AgentID)
+		data["AgentPanels"] = agentPanels
+		type assignPanelOption struct {
+			Panel    db.Panel
+			Inbounds []panels.InboundInfo
+		}
+		var assignOpts []assignPanelOption
+		for _, p := range agentPanels {
+			opt := assignPanelOption{Panel: p}
+			if client, err := s.Panels.Get(r.Context(), p.ID); err == nil {
+				opt.Inbounds, _ = client.ListInbounds(r.Context())
+			}
+			assignOpts = append(assignOpts, opt)
+		}
+		data["AssignPanelOptions"] = assignOpts
 		agent, _ := s.Store.GetAgent(r.Context(), bot.AgentID)
 		data["AgentPublicURL"] = s.AgentPublicURL(r.Context(), agent)
 	}
@@ -264,13 +280,125 @@ func (s *Server) postBotDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/master/bots", http.StatusSeeOther)
 }
 
+type botPanelRow struct {
+	PanelID        int64
+	PanelName      string
+	InboundIDs     []int
+	InboundLabels  []string
+}
+
+func (s *Server) botPanelRows(r *http.Request, botID int64) []botPanelRow {
+	bps, _ := s.Store.ListBotPanels(r.Context(), botID)
+	out := make([]botPanelRow, 0, len(bps))
+	for _, bp := range bps {
+		row := botPanelRow{PanelID: bp.PanelID}
+		if p, err := s.Store.GetPanel(r.Context(), bp.PanelID); err == nil {
+			row.PanelName = p.Name
+		} else {
+			row.PanelName = fmt.Sprintf("Panel %d", bp.PanelID)
+		}
+		var scope panels.Scope
+		_ = json.Unmarshal(bp.ScopeJSON, &scope)
+		if len(scope.InboundIDs) == 0 && scope.InboundID > 0 {
+			scope.InboundIDs = []int{scope.InboundID}
+		}
+		row.InboundIDs = scope.InboundIDs
+		if client, err := s.Panels.Get(r.Context(), bp.PanelID); err == nil {
+			if inb, err := client.ListInbounds(r.Context()); err == nil {
+				tagByID := map[int]string{}
+				for _, i := range inb {
+					tagByID[i.ID] = i.Tag
+				}
+				if len(row.InboundIDs) == 0 {
+					row.InboundLabels = []string{"all inbounds"}
+				} else {
+					for _, id := range row.InboundIDs {
+						tag := tagByID[id]
+						if tag == "" {
+							tag = fmt.Sprintf("%d", id)
+						}
+						row.InboundLabels = append(row.InboundLabels, fmt.Sprintf("%d: %s", id, tag))
+					}
+				}
+			}
+		}
+		if len(row.InboundLabels) == 0 && len(row.InboundIDs) > 0 {
+			for _, id := range row.InboundIDs {
+				row.InboundLabels = append(row.InboundLabels, strconv.Itoa(id))
+			}
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
 func (s *Server) postBotPanel(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
 	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	admin, scope, ok := s.requireBotManage(r, botID)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if !scope.IsMaster {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	_ = r.ParseForm()
 	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
-	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(parseInboundIDs(r.FormValue("inbound_ids")))}
-	err := s.Store.UpsertBotPanel(r.Context(), bp)
+	redirect := fmt.Sprintf("/master/bots/%d/settings?tab=panels", botID)
+	if panelID <= 0 {
+		s.setFlash(w, "err", "Select a panel first")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	bot, err := s.Store.GetBot(r.Context(), botID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	okAgent, err := s.Store.AgentHasPanel(r.Context(), bot.AgentID, panelID)
+	if err != nil || !okAgent {
+		s.setFlash(w, "err", "Panel is not assigned to this bot's agent")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	inboundIDs := inboundIDsFromForm(r.Form["inbound_ids"], r.FormValue("inbound_ids"), 0)
+	if len(inboundIDs) > 0 {
+		granted, _ := s.Store.ListAgentInboundCreateIDs(r.Context(), bot.AgentID, panelID)
+		grantSet := map[int]bool{}
+		for _, id := range granted {
+			grantSet[id] = true
+		}
+		for _, id := range inboundIDs {
+			if len(granted) > 0 && !grantSet[id] {
+				s.setFlash(w, "err", "Some inbounds are not granted to the agent for create")
+				http.Redirect(w, r, redirect, http.StatusSeeOther)
+				return
+			}
+		}
+	}
+	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(inboundIDs)}
+	err = s.Store.UpsertBotPanel(r.Context(), bp)
+	if err == nil {
+		s.audit(r, &admin.ID, "bot_panel_link", "bot", botID, map[string]any{"panel_id": panelID, "inbounds": inboundIDs})
+	}
 	s.saveFlash(w, err, "Panel linked to bot")
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *Server) postBotPanelDelete(w http.ResponseWriter, r *http.Request) {
+	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "panel_id"), 10, 64)
+	admin, scope, ok := s.requireBotManage(r, botID)
+	if !ok || !scope.IsMaster {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	err := s.Store.DeleteBotPanel(r.Context(), botID, panelID)
+	if err == nil {
+		s.audit(r, &admin.ID, "bot_panel_unlink", "bot", botID, map[string]any{"panel_id": panelID})
+	}
+	s.saveFlash(w, err, "Panel unlinked from bot")
 	http.Redirect(w, r, fmt.Sprintf("/master/bots/%d/settings?tab=panels", botID), http.StatusSeeOther)
 }
 

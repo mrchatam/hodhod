@@ -19,6 +19,19 @@
     <form hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/enable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.enable"}}</button></form>
     {{end}}
     <form hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/delete" hx-target="#pu-row-{{.Row.Username}}" hx-swap="delete" hx-confirm="{{T $.Lang "confirm.delete"}}"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full text-[var(--color-danger)]">{{T $.Lang "common.delete"}}</button></form>
+    {{if $.IsMaster}}
+    <details class="px-3 py-2 border-t border-[var(--color-border)]">
+      <summary class="cursor-pointer text-sm">{{T $.Lang "access.attach_user"}}</summary>
+      <form class="mt-2 flex flex-wrap gap-2 items-end" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/attach-agent" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+        <select name="agent_id" class="form-select text-xs py-1 flex-1 min-w-[8rem]" required>
+          <option value="">{{T $.Lang "table.agent"}}</option>
+          {{range $.Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">{{T $.Lang "access.attach_user"}}</button>
+      </form>
+    </details>
+    {{end}}
   </div>
 </div>
 {{else if .Row.ServiceID}}

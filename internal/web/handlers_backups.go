@@ -1,33 +1,40 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/mrchatam/hodhod/internal/db"
 	"github.com/mrchatam/hodhod/internal/panels"
 )
 
 func (s *Server) pagePanelBackups(w http.ResponseWriter, r *http.Request) {
 	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	panel, err := s.Store.GetPanel(r.Context(), panelID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
+	target := panelTabURL(panelID, "backups")
+	if q := r.URL.RawQuery; q != "" {
+		target += "&" + q
 	}
+	http.Redirect(w, r, target, http.StatusMovedPermanently)
+}
+
+func (s *Server) loadPanelBackupsViewData(r *http.Request, panel *db.Panel) map[string]any {
+	panelID := panel.ID
 	total, _ := s.Store.CountPanelBackups(r.Context(), panelID)
-	pag := paginationFromRequest(r, int(total))
+	pag := paginationFromRequest(r, int(total), "tab")
+	if pag.Query["tab"] == "" {
+		pag.Query["tab"] = "backups"
+	}
 	backups, _ := s.Store.ListPanelBackupsPaginated(r.Context(), panelID, pag.PerPage, pag.Offset())
 	settings := s.panelBackupSettings(r, panelID)
 	client, _ := s.Panels.Get(r.Context(), panelID)
 	_, supportsBackup := client.(panels.Backuper)
-	s.renderPage(w, "panel_backups", r, map[string]any{
-		"Panel": panel, "Backups": backups, "Settings": settings, "SupportsBackup": supportsBackup,
+	return map[string]any{
+		"Backups": backups, "Settings": settings, "SupportsBackup": supportsBackup,
 		"Pagination": pag,
-	})
+	}
 }
 
 func (s *Server) panelBackupSettings(r *http.Request, panelID int64) map[string]string {
@@ -47,12 +54,12 @@ func (s *Server) postPanelBackupRun(w http.ResponseWriter, r *http.Request) {
 	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if s.Backup == nil {
 		s.setFlash(w, "err", "Backup service not configured")
-		http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/backups", panelID), http.StatusSeeOther)
+		http.Redirect(w, r, panelTabURL(panelID, "backups"), http.StatusSeeOther)
 		return
 	}
 	_, err := s.Backup.RunForPanel(r.Context(), panelID)
 	s.saveFlash(w, err, "Backup completed")
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/backups", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "backups"), http.StatusSeeOther)
 }
 
 func (s *Server) getPanelBackupDownload(w http.ResponseWriter, r *http.Request) {
@@ -95,11 +102,11 @@ func (s *Server) postPanelBackupSettings(w http.ResponseWriter, r *http.Request)
 		enc, err := s.Box.Encrypt(token)
 		if err != nil {
 			s.setFlash(w, "err", "Could not encrypt bot token")
-			http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/backups", panelID), http.StatusSeeOther)
+			http.Redirect(w, r, panelTabURL(panelID, "backups"), http.StatusSeeOther)
 			return
 		}
 		_ = s.Store.SetSetting(r.Context(), "panel", panelID, "backup_tg_bot_token", enc)
 	}
 	s.setFlash(w, "ok", "Backup settings saved")
-	http.Redirect(w, r, fmt.Sprintf("/master/panels/%d/backups", panelID), http.StatusSeeOther)
+	http.Redirect(w, r, panelTabURL(panelID, "backups"), http.StatusSeeOther)
 }

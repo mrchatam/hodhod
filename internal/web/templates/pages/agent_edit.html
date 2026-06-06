@@ -30,10 +30,12 @@
       <label class="form-field">
         <span class="form-label">{{T .Lang "agent_edit.max_bots"}}</span>
         <input name="max_bots" type="number" value="{{.Agent.MaxBots}}" class="form-input">
+        <p class="form-hint">{{T .Lang "agent_edit.unlimited"}}</p>
       </label>
       <label class="form-field">
         <span class="form-label">{{T .Lang "agent_edit.price_floor"}}</span>
         <input name="price_floor" type="number" value="{{.Agent.PriceFloorToman}}" class="form-input">
+        <p class="form-hint">{{T .Lang "form_hint.plan_price"}}</p>
       </label>
       <label class="form-field">
         <span class="form-label">{{T .Lang "agent_edit.price_ceiling"}}</span>
@@ -76,30 +78,53 @@
 </section>
 
 <section id="tab-panels" class="tab-panel hidden space-y-4">
-  <form method="post" action="/master/agents/{{.Agent.ID}}/panels" class="card p-6 space-y-4 max-w-lg">
+  <form method="post" action="/master/agents/{{.Agent.ID}}/panels" class="card p-6 space-y-4 max-w-2xl" id="agent-panel-assign-form">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
-    <h3 class="font-semibold">{{T .Lang "agent_edit.assigned_panels"}}</h3>
+    <h3 class="font-semibold">{{T .Lang "agent_edit.assign_panel"}}</h3>
     <label class="form-field">
       <span class="form-label">{{T .Lang "table.panel"}}</span>
-      <select name="panel_id" class="form-select">
+      <select name="panel_id" id="agent-assign-panel" class="form-select" required>
+        <option value="">{{T .Lang "bot_settings.select_panel"}}</option>
         {{range .PanelRows}}
         <option value="{{.Panel.ID}}">{{.Panel.Name}}{{if .Inbounds}} ({{len .Inbounds}} {{T $.Lang "panel_users.inbound"}}){{end}}</option>
         {{end}}
       </select>
+      <p class="form-hint">{{T .Lang "agent_edit.panel_assign_hint"}}</p>
     </label>
+    {{range .PanelRows}}
+    <div class="agent-assign-inbounds hidden overflow-x-auto" data-panel-id="{{.Panel.ID}}">
+      {{if .Inbounds}}
+      <table class="data-table text-sm">
+        <thead><tr><th>{{T $.Lang "panel_users.inbound"}}</th><th>{{T $.Lang "access.allow_create"}}</th><th>{{T $.Lang "access.allow_view_users"}}</th></tr></thead>
+        <tbody>
+        {{range .Inbounds}}
+        <tr>
+          <td>{{.ID}}: {{.Tag}}</td>
+          <td><input type="checkbox" name="inbound_{{.ID}}_create"></td>
+          <td><input type="checkbox" name="inbound_{{.ID}}_view"></td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+      <p class="form-hint">{{T $.Lang "agent_edit.inbound_hint"}}</p>
+      {{else}}<p class="text-sm opacity-60">{{T $.Lang "panel_users.list_err_hint"}}</p>{{end}}
+    </div>
+    {{end}}
     <label class="form-field">
       <span class="form-label">{{T .Lang "agent_edit.max_users"}}</span>
       <input name="max_users" type="number" class="form-input" placeholder="{{T .Lang "agent_edit.unlimited"}}">
+      <p class="form-hint">{{T .Lang "agent_edit.max_users_hint"}}</p>
     </label>
     <label class="form-field">
       <span class="form-label">{{T .Lang "agent_edit.max_duration"}}</span>
       <input name="expiry_cap_days" type="number" class="form-input">
+      <p class="form-hint">{{T .Lang "agent_edit.max_duration_hint"}}</p>
     </label>
     <button type="submit" class="btn btn-primary">{{T .Lang "agent_edit.assign_panel"}}</button>
   </form>
   <ul class="space-y-2">{{range .AgentPanels}}<li class="card p-3 text-sm flex justify-between items-center">
     <span>{{T $.Lang "table.panel"}} {{.PanelID}} · {{T $.Lang "agent_edit.max_users"}} {{.MaxUsers}} · {{.ExpiryCapDays}}d</span>
-    <a href="/master/agents/{{$.Agent.ID}}?access_panel={{.PanelID}}#tab-panels" class="btn btn-secondary btn-sm">{{T $.Lang "access.select_panel"}}</a>
+    <a href="/master/agents/{{$.Agent.ID}}?access_panel={{.PanelID}}#tab-panels" class="btn btn-secondary btn-sm">{{T $.Lang "access.manage_users"}}</a>
   </li>{{end}}</ul>
 
   {{if .AccessPanelID}}
@@ -112,13 +137,16 @@
     <h3 class="font-semibold">{{T .Lang "access.inbound_table"}} — {{T .Lang "table.panel"}} {{.AccessPanelID}}</h3>
     <div class="overflow-x-auto">
       <table class="data-table text-sm">
-        <thead><tr><th>{{T .Lang "panel_users.inbound"}}</th><th>{{T .Lang "access.allow_create"}}</th><th>{{T .Lang "access.allow_view_users"}}</th></tr></thead>
+        <thead><tr><th>{{T .Lang "panel_users.inbound"}}</th><th>{{T .Lang "access.allow_create"}}</th><th>{{T .Lang "access.allow_view_users"}}</th><th></th></tr></thead>
         <tbody>
         {{range .AccessInboundRows}}
         <tr>
           <td>{{.InboundID}}: {{.Tag}}</td>
           <td><input type="checkbox" name="inbound_{{.InboundID}}_create" {{if .AllowCreate}}checked{{end}}></td>
           <td><input type="checkbox" name="inbound_{{.InboundID}}_view" {{if .AllowViewUsers}}checked{{end}}></td>
+          <td class="text-end">
+            <button type="submit" formaction="/master/agents/{{$.Agent.ID}}/attach-inbound-users" formmethod="post" name="inbound_id" value="{{.InboundID}}" class="btn btn-secondary btn-sm">{{T $.Lang "access.attach_all_users"}}</button>
+          </td>
         </tr>
         {{end}}
         </tbody>

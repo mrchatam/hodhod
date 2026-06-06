@@ -174,43 +174,7 @@ func (s *Server) postAgentAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var inboundGrants []db.AgentInboundGrant
-	for key, val := range r.Form {
-		if !strings.HasPrefix(key, "inbound_") || val[0] != "on" {
-			continue
-		}
-		parts := strings.Split(strings.TrimPrefix(key, "inbound_"), "_")
-		if len(parts) != 2 {
-			continue
-		}
-		inboundID, err := strconv.Atoi(parts[0])
-		if err != nil {
-			continue
-		}
-		g := db.AgentInboundGrant{InboundID: inboundID}
-		switch parts[1] {
-		case "create":
-			g.AllowCreate = true
-		case "view":
-			g.AllowViewUsers = true
-		default:
-			continue
-		}
-		found := false
-		for i := range inboundGrants {
-			if inboundGrants[i].InboundID == inboundID {
-				if parts[1] == "create" {
-					inboundGrants[i].AllowCreate = true
-				} else {
-					inboundGrants[i].AllowViewUsers = true
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
-			inboundGrants = append(inboundGrants, g)
-		}
-	}
+	inboundGrants = parseInboundGrantsFromForm(r.Form)
 	if err := s.Store.ReplaceAgentInboundGrants(r.Context(), id, panelID, inboundGrants); err != nil {
 		s.saveFlash(w, err, "")
 		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d?access_panel=%d#tab-panels", id, panelID), http.StatusSeeOther)
@@ -342,6 +306,11 @@ func (s *Server) postAgentPanel(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	_ = r.ParseForm()
 	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
+	if panelID <= 0 {
+		s.setFlash(w, "err", "Select a panel")
+		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d#tab-panels", id), http.StatusSeeOther)
+		return
+	}
 	maxUsers, _ := strconv.Atoi(r.FormValue("max_users"))
 	capDays, _ := strconv.Atoi(r.FormValue("expiry_cap_days"))
 	ap := &db.AgentPanel{
@@ -349,8 +318,63 @@ func (s *Server) postAgentPanel(w http.ResponseWriter, r *http.Request) {
 		MaxUsers: maxUsers, ExpiryCapDays: capDays,
 	}
 	err := s.Store.UpsertAgentPanel(r.Context(), ap)
-	s.saveFlash(w, err, "Panel assigned")
-	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d", id), http.StatusSeeOther)
+	if err != nil {
+		s.saveFlash(w, err, "")
+		http.Redirect(w, r, fmt.Sprintf("/master/agents/%d#tab-panels", id), http.StatusSeeOther)
+		return
+	}
+	inboundGrants := parseInboundGrantsFromForm(r.Form)
+	if err := s.Store.ReplaceAgentInboundGrants(r.Context(), id, panelID, inboundGrants); err != nil {
+		s.saveFlash(w, err, "")
+	} else {
+		s.setFlash(w, "ok", "Panel assigned")
+	}
+	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d?access_panel=%d#tab-panels", id, panelID), http.StatusSeeOther)
+}
+
+func (s *Server) postAgentAttachInboundUsers(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	_ = r.ParseForm()
+	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
+	inboundID, _ := strconv.Atoi(r.FormValue("inbound_id"))
+	redirect := fmt.Sprintf("/master/agents/%d?access_panel=%d#tab-panels", id, panelID)
+	if panelID <= 0 || inboundID <= 0 {
+		s.setFlash(w, "err", "Invalid panel or inbound")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	ok, err := s.Store.AgentHasPanel(r.Context(), id, panelID)
+	if err != nil || !ok {
+		s.setFlash(w, "err", "Panel not assigned to agent")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	client, err := s.Panels.Get(r.Context(), panelID)
+	if err != nil {
+		s.saveFlash(w, err, "")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	users, err := client.ListUsers(r.Context())
+	if err != nil {
+		s.saveFlash(w, err, "")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	inboundSet := map[int]bool{inboundID: true}
+	var names []string
+	for _, u := range users {
+		if userOnInbound(u, inboundSet) {
+			names = append(names, u.Username)
+		}
+	}
+	n, err := s.attachPanelUsersToAgent(r.Context(), id, panelID, names)
+	if err != nil {
+		s.saveFlash(w, err, "")
+	} else {
+		s.setFlash(w, "ok", fmt.Sprintf("Attached %d users", n))
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 func (s *Server) postAgentResetPassword(w http.ResponseWriter, r *http.Request) {
@@ -431,11 +455,123 @@ func (s *Server) pagePanelEdit(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	tab := r.URL.Query().Get("tab")
+	if tab == "" {
+		tab = "details"
+	}
 	agentRows, _ := s.Store.ListPanelAgentRows(r.Context(), id)
 	botRows, _ := s.Store.ListPanelBotRows(r.Context(), id)
-	s.renderPage(w, "panel_edit", r, map[string]any{
-		"Panel": p, "AgentRows": agentRows, "BotRows": botRows,
-	})
+	data := map[string]any{
+		"Panel": p, "AgentRows": agentRows, "BotRows": botRows, "Tab": tab,
+	}
+	allAgents, _ := s.Store.ListAgents(r.Context())
+	data["AllAgents"] = allAgents
+	if client, err := s.Panels.Get(r.Context(), id); err == nil {
+		data["Inbounds"], _ = client.ListInbounds(r.Context())
+	}
+	var assignBots []db.Bot
+	seenBot := map[int64]bool{}
+	for _, ar := range agentRows {
+		bots, _ := s.Store.ListBotsByAgent(r.Context(), ar.AgentID)
+		for _, b := range bots {
+			if !seenBot[b.ID] {
+				seenBot[b.ID] = true
+				assignBots = append(assignBots, b)
+			}
+		}
+	}
+	data["AssignBots"] = assignBots
+	switch tab {
+	case "users":
+		for k, v := range s.loadPanelUsersViewData(r, p) {
+			data[k] = v
+		}
+	case "backups":
+		for k, v := range s.loadPanelBackupsViewData(r, p) {
+			data[k] = v
+		}
+	case "templates":
+		templates, _ := loadUserCreateTemplates(r.Context(), s.Store, id)
+		data["Templates"] = templates
+	}
+	s.renderPage(w, "panel_edit", r, data)
+}
+
+func (s *Server) postPanelAgent(w http.ResponseWriter, r *http.Request) {
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	_ = r.ParseForm()
+	agentID, _ := strconv.ParseInt(r.FormValue("agent_id"), 10, 64)
+	if agentID <= 0 {
+		s.setFlash(w, "err", "Select an agent")
+		http.Redirect(w, r, panelTabURL(panelID, "agents"), http.StatusSeeOther)
+		return
+	}
+	maxUsers, _ := strconv.Atoi(r.FormValue("max_users"))
+	capDays, _ := strconv.Atoi(r.FormValue("expiry_cap_days"))
+	ap := &db.AgentPanel{
+		AgentID: agentID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(nil),
+		MaxUsers: maxUsers, ExpiryCapDays: capDays,
+	}
+	if err := s.Store.UpsertAgentPanel(r.Context(), ap); err != nil {
+		s.saveFlash(w, err, "")
+		http.Redirect(w, r, panelTabURL(panelID, "agents"), http.StatusSeeOther)
+		return
+	}
+	inboundGrants := parseInboundGrantsFromForm(r.Form)
+	if err := s.Store.ReplaceAgentInboundGrants(r.Context(), agentID, panelID, inboundGrants); err != nil {
+		s.saveFlash(w, err, "")
+	} else {
+		s.setFlash(w, "ok", "Agent assigned")
+	}
+	http.Redirect(w, r, panelTabURL(panelID, "agents"), http.StatusSeeOther)
+}
+
+func (s *Server) postPanelBot(w http.ResponseWriter, r *http.Request) {
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	_ = r.ParseForm()
+	botID, _ := strconv.ParseInt(r.FormValue("bot_id"), 10, 64)
+	redirect := panelTabURL(panelID, "bots")
+	if botID <= 0 {
+		s.setFlash(w, "err", "Select a bot")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	bot, err := s.Store.GetBot(r.Context(), botID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	okAgent, err := s.Store.AgentHasPanel(r.Context(), bot.AgentID, panelID)
+	if err != nil || !okAgent {
+		s.setFlash(w, "err", "Bot's agent is not assigned to this panel")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	inboundIDs := inboundIDsFromForm(r.Form["inbound_ids"], r.FormValue("inbound_ids"), 0)
+	if len(inboundIDs) > 0 {
+		granted, _ := s.Store.ListAgentInboundCreateIDs(r.Context(), bot.AgentID, panelID)
+		grantSet := map[int]bool{}
+		for _, id := range granted {
+			grantSet[id] = true
+		}
+		for _, id := range inboundIDs {
+			if len(granted) > 0 && !grantSet[id] {
+				s.setFlash(w, "err", "Some inbounds are not granted to the agent")
+				http.Redirect(w, r, redirect, http.StatusSeeOther)
+				return
+			}
+		}
+	}
+	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(inboundIDs)}
+	s.saveFlash(w, s.Store.UpsertBotPanel(r.Context(), bp), "Bot linked to panel")
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *Server) postPanelBotDelete(w http.ResponseWriter, r *http.Request) {
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	botID, _ := strconv.ParseInt(chi.URLParam(r, "bot_id"), 10, 64)
+	s.saveFlash(w, s.Store.DeleteBotPanel(r.Context(), botID, panelID), "Bot unlinked")
+	http.Redirect(w, r, panelTabURL(panelID, "bots"), http.StatusSeeOther)
 }
 
 func (s *Server) postPanelUpdate(w http.ResponseWriter, r *http.Request) {
