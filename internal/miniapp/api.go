@@ -27,9 +27,12 @@ func (a *API) Routes(r chi.Router) {
 	r.Route("/api/miniapp/{publicID}", func(r chi.Router) {
 		r.Get("/plans", a.plans)
 		r.Get("/wallet", a.wallet)
+		r.Get("/wallet/transactions", a.walletTransactions)
 		r.Get("/services", a.services)
 		r.Post("/orders", a.createOrder)
+		r.Post("/orders/card", a.createCardOrder)
 		r.Post("/wallet/topup", a.createTopUp)
+		r.Post("/trial", a.createTrial)
 	})
 }
 
@@ -163,4 +166,93 @@ func (a *API) createTopUp(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payment)
+}
+
+func (a *API) createCardOrder(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		PlanID     int64  `json:"plan_id"`
+		ReceiptRef string `json:"receipt_ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PlanID == 0 || body.ReceiptRef == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	plan, err := a.Store.GetPlan(r.Context(), botID, body.PlanID)
+	if err != nil {
+		http.Error(w, "plan not found", http.StatusNotFound)
+		return
+	}
+	payment, err := a.Orders.CreatePlanOrderPayment(r.Context(), botID, user, plan, body.ReceiptRef)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payment)
+}
+
+func (a *API) walletTransactions(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	txs, err := a.Store.ListWalletTxByUser(r.Context(), botID, user.ID, 20)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(txs)
+}
+
+func (a *API) createTrial(w http.ResponseWriter, r *http.Request) {
+	botID, _, user, err := a.auth(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if user.TrialUsedAt != nil {
+		http.Error(w, "trial already used", http.StatusConflict)
+		return
+	}
+	plans, err := a.Store.ListPlansByBot(r.Context(), botID, true)
+	if err != nil || len(plans) == 0 {
+		http.Error(w, "no trial plan", http.StatusNotFound)
+		return
+	}
+	plan := plans[0]
+	for _, p := range plans {
+		if p.IsTrial {
+			plan = p
+			break
+		}
+	}
+	now := time.Now()
+	order := &db.Order{
+		BotID: botID, EndUserID: user.ID, PlanID: plan.ID,
+		Status: db.OrderApproved, PriceToman: plan.PriceToman,
+		IsTrial: true, PaymentMethod: "trial", ApprovedAt: &now,
+	}
+	if err := a.Store.CreateOrder(r.Context(), order); err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	svc, err := a.Prov.ProvisionOrder(r.Context(), botID, order)
+	if err != nil {
+		http.Error(w, "provisioning failed", http.StatusBadGateway)
+		return
+	}
+	now := time.Now()
+	user.TrialUsedAt = &now
+	user.TrialCount++
+	_ = a.Store.UpdateEndUser(r.Context(), botID, user)
+	_ = a.Orders.MarkOrderProvisioned(r.Context(), botID, order.ID)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"service": svc})
 }

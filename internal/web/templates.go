@@ -19,7 +19,7 @@ var templateFS embed.FS
 var pageNames = []string{
 	"dashboard", "payments", "services", "service_create", "onboarding", "onboarding_master", "onboarding_agent",
 	"agents", "agent_edit", "agent_panels", "agent_customers", "agent_panel_customers", "customer_create", "panels", "panel_edit", "panel_users", "panel_backups", "bots", "bot_settings",
-	"agent_bots", "agent_plans", "agent_bot_settings",
+	"agent_plans", "account_password", "bot_users", "bot_user_detail",
 }
 
 func parseTemplates() (map[string]*template.Template, *template.Template, error) {

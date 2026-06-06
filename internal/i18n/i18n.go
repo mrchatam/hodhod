@@ -30,6 +30,11 @@ var messages = map[string]map[string]string{
 		"service_expiring":     "سرویس شما به زودی منقضی می‌شود.",
 		"service_expired":      "سرویس شما منقضی شده است.",
 		"force_join_required":  "برای استفاده از ربات ابتدا در کانال %s عضو شوید.",
+		"pay_method_select":    "پلن %s — %d تومان\nروش پرداخت را انتخاب کنید:",
+		"btn_pay_wallet":       "پرداخت از کیف پول",
+		"btn_pay_card":         "کارت به کارت",
+		"plan_card_instructions": "مبلغ %d تومان را واریز کنید:",
+		"user_blocked":         "دسترسی شما مسدود شده است.",
 	},
 	"en": {
 		"start_welcome":        "Welcome to the VPN sales bot.",
@@ -58,6 +63,11 @@ var messages = map[string]map[string]string{
 		"service_expiring":     "Your service is expiring soon.",
 		"service_expired":      "Your service has expired.",
 		"force_join_required":  "Please join %s before using this bot.",
+		"pay_method_select":    "Plan %s — %d Toman\nChoose payment method:",
+		"btn_pay_wallet":       "Pay from wallet",
+		"btn_pay_card":         "Card transfer",
+		"plan_card_instructions": "Transfer %d Toman:",
+		"user_blocked":         "Your access has been blocked.",
 	},
 }
 

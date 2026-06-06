@@ -7,6 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/mrchatam/hodhod/internal/backup"
+	"github.com/mrchatam/hodhod/internal/billing"
+	"github.com/mrchatam/hodhod/internal/botconfig"
 	"github.com/mrchatam/hodhod/internal/config"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -26,19 +28,32 @@ type Server struct {
 	Sales          *sales.Service
 	Backup         *backup.Service
 	DomainVerifier *domains.Verifier
+	BotSvc         *botconfig.BotService
+	BotReader      *botconfig.Reader
+	CardPick       *botconfig.CardPicker
+	Review         *billing.PaymentReviewService
+	Orders         *billing.OrderService
+	Wallet         *billing.WalletService
 	pages          map[string]*template.Template
 	loginT         *template.Template
 }
 
 // NewServer creates a web server.
-func NewServer(cfg *config.Config, store *db.Store, box *crypto.Box, reg *panels.Registry, tg *telegram.Manager, salesSvc *sales.Service, backupSvc *backup.Service) (*Server, error) {
+func NewServer(cfg *config.Config, store *db.Store, box *crypto.Box, reg *panels.Registry, tg *telegram.Manager, salesSvc *sales.Service, backupSvc *backup.Service, wallet *billing.WalletService, orders *billing.OrderService, review *billing.PaymentReviewService) (*Server, error) {
 	pages, loginT, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
+	reader := &botconfig.Reader{Store: store}
 	return &Server{
 		Cfg: cfg, Store: store, Box: box, Panels: reg, Telegram: tg, Sales: salesSvc, Backup: backupSvc,
 		DomainVerifier: &domains.Verifier{Resolver: domains.NetResolver{}},
+		BotSvc:         &botconfig.BotService{Store: store},
+		BotReader:      reader,
+		CardPick:       &botconfig.CardPicker{Store: store},
+		Review:         review,
+		Orders:         orders,
+		Wallet:         wallet,
 		pages:          pages, loginT: loginT,
 	}, nil
 }
@@ -57,6 +72,8 @@ func (s *Server) Handler() http.Handler {
 		r.Use(s.requireAuth)
 		r.Post("/account/lang", s.postAccountLang)
 		r.Post("/account/theme", s.postAccountTheme)
+		r.Get("/account/password", s.pageAccountPassword)
+		r.Post("/account/password", s.postAccountPassword)
 		r.Get("/", s.pageDashboard)
 		r.Get("/onboarding", s.pageOnboarding)
 
@@ -116,7 +133,14 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/bots", s.postBot)
 			r.Get("/bots/{id}/settings", s.pageBotSettings)
 			r.Post("/bots/{id}/settings", s.postBotSettings)
+			r.Post("/bots/{id}/delete", s.postBotDelete)
 			r.Post("/bots/{id}/bot-panels", s.postBotPanel)
+			r.Post("/bots/{id}/cards", s.postBotCard)
+			r.Post("/bots/{id}/cards/{cid}/delete", s.postBotCardDelete)
+			r.Get("/bots/{id}/users", s.pageBotUsers)
+			r.Get("/bots/{id}/users/{uid}", s.pageBotUserDetail)
+			r.Post("/bots/{id}/users/{uid}/block", s.postBotUserBlock)
+			r.Post("/bots/{id}/users/{uid}/wallet/adjust", s.postBotUserWalletAdjust)
 		})
 
 		r.Route("/agent", func(r chi.Router) {
@@ -125,10 +149,16 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/plans", s.postAgentPlan)
 			r.Post("/plans/{id}", s.postAgentPlanUpdate)
 			r.Post("/plans/{id}/disable", s.postAgentPlanDisable)
-			r.Get("/bots", s.pageAgentBots)
-			r.Post("/bots", s.postAgentBot)
-			r.Get("/bots/{id}/settings", s.pageAgentBotSettings)
-			r.Post("/bots/{id}/settings", s.postAgentBotSettings)
+			r.Get("/bots", s.pageBots)
+			r.Post("/bots", s.postBot)
+			r.Get("/bots/{id}/settings", s.pageBotSettings)
+			r.Post("/bots/{id}/settings", s.postBotSettings)
+			r.Post("/bots/{id}/cards", s.postBotCard)
+			r.Post("/bots/{id}/cards/{cid}/delete", s.postBotCardDelete)
+			r.Get("/bots/{id}/users", s.pageBotUsers)
+			r.Get("/bots/{id}/users/{uid}", s.pageBotUserDetail)
+			r.Post("/bots/{id}/users/{uid}/block", s.postBotUserBlock)
+			r.Post("/bots/{id}/users/{uid}/wallet/adjust", s.postBotUserWalletAdjust)
 			r.Get("/panels", s.pageAgentPanels)
 			r.Get("/panels/{id}/customers", s.pageAgentPanelCustomers)
 			r.Post("/panels/{id}/users", s.postAgentPanelUser)

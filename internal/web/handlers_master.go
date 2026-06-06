@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/db"
 	"github.com/mrchatam/hodhod/internal/panels"
-	"github.com/mrchatam/hodhod/internal/telegram"
 )
 
 func (s *Server) pageAgents(w http.ResponseWriter, r *http.Request) {
@@ -423,111 +422,6 @@ func (s *Server) testPanel(w http.ResponseWriter, r *http.Request) {
 		s.setFlash(w, "err", msg)
 	}
 	http.Redirect(w, r, "/master/panels", http.StatusSeeOther)
-}
-
-func (s *Server) pageBots(w http.ResponseWriter, r *http.Request) {
-	agents, _ := s.Store.ListAgents(r.Context())
-	var all []db.Bot
-	for _, a := range agents {
-		bots, _ := s.Store.ListBotsByAgent(r.Context(), a.ID)
-		all = append(all, bots...)
-	}
-	s.renderPage(w, "bots", r, map[string]any{"Bots": all, "Agents": agents})
-}
-
-func (s *Server) postBot(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	agentID, _ := strconv.ParseInt(r.FormValue("agent_id"), 10, 64)
-	agent, err := s.Store.GetAgent(r.Context(), agentID)
-	if err != nil {
-		http.Error(w, "invalid agent", http.StatusBadRequest)
-		return
-	}
-	count, _ := s.Store.CountBotsByAgent(r.Context(), agentID)
-	if int(count) >= agent.MaxBots {
-		http.Error(w, "agent max bots reached", http.StatusBadRequest)
-		return
-	}
-	if err := s.postBotWithToken(r, agentID); err != nil {
-		s.setFlash(w, "err", err.Error())
-		http.Redirect(w, r, "/master/bots", http.StatusSeeOther)
-		return
-	}
-	s.setFlash(w, "ok", "Bot added")
-	http.Redirect(w, r, "/master/bots", http.StatusSeeOther)
-}
-
-func (s *Server) pageBotSettings(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	bot, err := s.Store.GetBot(r.Context(), id)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	whURL, whStatus := s.Telegram.WebhookInfo(r.Context(), id)
-	botPanels, _ := s.Store.ListBotPanels(r.Context(), id)
-	agentPanels, _ := s.Store.ListPanelsForAgent(r.Context(), bot.AgentID)
-	agent, _ := s.Store.GetAgent(r.Context(), bot.AgentID)
-	s.renderPage(w, "bot_settings", r, map[string]any{
-		"Bot": bot, "Settings": s.botSettingsMap(r, id),
-		"WebhookURL": whURL, "WebhookStatus": whStatus,
-		"BotPanels": botPanels, "AgentPanels": agentPanels,
-		"AgentPublicURL": s.AgentPublicURL(r.Context(), agent),
-	})
-}
-
-func (s *Server) postBotSettings(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	admin := r.Context().Value(ctxAdmin).(*db.Admin)
-	if !s.canAccessBot(r, admin, id) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	_ = r.ParseForm()
-	bot, _ := s.Store.GetBot(r.Context(), id)
-	if st := r.FormValue("status"); st != "" {
-		bot.Status = st
-		_ = s.Store.UpdateBot(r.Context(), bot)
-		if st == "active" {
-			_ = s.Telegram.Add(r.Context(), id)
-		} else {
-			s.Telegram.Remove(bot.PublicID)
-		}
-	}
-	if token := r.FormValue("token"); token != "" {
-		username, err := telegram.ValidateToken(r.Context(), s.Box, token, s.Telegram.HTTPClient())
-		if err != nil {
-			s.setFlash(w, "err", err.Error())
-			redirect := fmt.Sprintf("/master/bots/%d/settings", id)
-			if admin.Role == db.RoleAgent {
-				redirect = fmt.Sprintf("/agent/bots/%d/settings", id)
-			}
-			http.Redirect(w, r, redirect, http.StatusSeeOther)
-			return
-		}
-		enc, _ := s.Box.Encrypt(strings.TrimSpace(token))
-		bot.TokenEnc = enc
-		bot.Username = username
-		_ = s.Store.UpdateBot(r.Context(), bot)
-		_ = s.Telegram.Reload(r.Context(), id)
-	}
-	s.saveBotSettings(r, id)
-	redirect := fmt.Sprintf("/master/bots/%d/settings", id)
-	if admin.Role == db.RoleAgent {
-		redirect = fmt.Sprintf("/agent/bots/%d/settings", id)
-	}
-	s.setFlash(w, "ok", "Settings saved")
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
-}
-
-func (s *Server) postBotPanel(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	panelID, _ := strconv.ParseInt(r.FormValue("panel_id"), 10, 64)
-	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(parseInboundIDs(r.FormValue("inbound_ids")))}
-	err := s.Store.UpsertBotPanel(r.Context(), bp)
-	s.saveFlash(w, err, "Panel linked to bot")
-	http.Redirect(w, r, fmt.Sprintf("/master/bots/%d/settings", botID), http.StatusSeeOther)
 }
 
 func (s *Server) pagePanelEdit(w http.ResponseWriter, r *http.Request) {

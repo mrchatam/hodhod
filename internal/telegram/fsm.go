@@ -6,8 +6,10 @@ import (
 )
 
 type userState struct {
-	Step   string
-	Amount int64
+	Step    string
+	Amount  int64
+	PlanID  int64
+	OrderID int64
 }
 
 type stateStore struct {

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/mrchatam/hodhod/internal/billing"
+	"github.com/mrchatam/hodhod/internal/botconfig"
 	"github.com/mrchatam/hodhod/internal/config"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -31,6 +32,9 @@ type Manager struct {
 	orders      *billing.OrderService
 	wallet      *billing.WalletService
 	prov        *provisioning.Service
+	review      *billing.PaymentReviewService
+	reader      *botconfig.Reader
+	cardPick    *botconfig.CardPicker
 	mu          sync.RWMutex
 	bots        map[string]*managedBot
 	handlers    *Handlers
@@ -55,10 +59,14 @@ func NewManager(
 	orders *billing.OrderService,
 	wallet *billing.WalletService,
 	prov *provisioning.Service,
+	review *billing.PaymentReviewService,
+	reader *botconfig.Reader,
+	cardPick *botconfig.CardPicker,
 ) *Manager {
 	m := &Manager{
 		cfg: cfg, box: box, store: store, http: httpClient,
 		orders: orders, wallet: wallet, prov: prov,
+		review: review, reader: reader, cardPick: cardPick,
 		bots:        make(map[string]*managedBot),
 		seenUpdates: make(map[string]struct{}),
 	}
@@ -134,6 +142,31 @@ func (m *Manager) Remove(publicID string) {
 	m.mu.Lock()
 	delete(m.bots, publicID)
 	m.mu.Unlock()
+}
+
+// DeleteWebhook removes the Telegram webhook for a bot.
+func (m *Manager) DeleteWebhook(ctx context.Context, botID int64) error {
+	rec, err := m.store.GetBot(ctx, botID)
+	if err != nil {
+		return err
+	}
+	m.mu.RLock()
+	mb, ok := m.bots[rec.PublicID]
+	m.mu.RUnlock()
+	if !ok {
+		token, err := m.box.Decrypt(rec.TokenEnc)
+		if err != nil {
+			return err
+		}
+		api, err := bot.New(token, telegramBotOptions(m.http, false)...)
+		if err != nil {
+			return err
+		}
+		_, err = api.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: false})
+		return err
+	}
+	_, err = mb.api.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: false})
+	return err
 }
 
 // Reload refreshes a bot from DB.
@@ -229,6 +262,10 @@ func CreateBotRecord(ctx context.Context, store *db.Store, box *crypto.Box, agen
 
 // SendMessage sends a text message to a telegram user.
 func (m *Manager) SendMessage(ctx context.Context, publicID string, chatID int64, text string) error {
+	return m.sendRichMessage(ctx, publicID, chatID, text, nil)
+}
+
+func (m *Manager) sendRichMessage(ctx context.Context, publicID string, chatID int64, text string, kb *models.InlineKeyboardMarkup) error {
 	m.mu.RLock()
 	mb, ok := m.bots[publicID]
 	m.mu.RUnlock()
@@ -236,8 +273,7 @@ func (m *Manager) SendMessage(ctx context.Context, publicID string, chatID int64
 		return fmt.Errorf("bot not loaded")
 	}
 	_, err := mb.api.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   text,
+		ChatID: chatID, Text: text, ReplyMarkup: kb,
 	})
 	return err
 }
@@ -257,10 +293,19 @@ func (h *Handlers) handle(ctx context.Context, mb *managedBot, upd *models.Updat
 	if err != nil {
 		return err
 	}
+	if user.Status == "blocked" {
+		_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: msg.Chat.ID, Text: i18n.T(user.Lang, "user_blocked"),
+		})
+		return nil
+	}
 	key := stateKey(mb.record.ID, user.ID)
 	st := h.mgr.states.get(key)
 
-	if len(msg.Photo) > 0 && st.Step == "topup_receipt" {
+	if len(msg.Photo) > 0 && (st.Step == "topup_receipt" || st.Step == "buy_receipt") {
+		if st.Step == "buy_receipt" {
+			return h.finishPlanReceipt(ctx, mb, user, msg.Chat.ID, st, msg.Photo[len(msg.Photo)-1].FileID)
+		}
 		return h.finishTopUp(ctx, mb, user, msg.Chat.ID, st, msg.Photo[len(msg.Photo)-1].FileID)
 	}
 
@@ -328,10 +373,13 @@ func (h *Handlers) handleCallback(ctx context.Context, mb *managedBot, upd *mode
 		return err
 	case "topup":
 		h.mgr.states.set(stateKey(mb.record.ID, user.ID), userState{Step: "topup_amount"})
-		cards, _ := h.mgr.store.GetSetting(ctx, "bot", mb.record.ID, "card_numbers")
 		text := i18n.T(user.Lang, "topup_enter_amount")
-		if cards != "" {
-			text += "\n\n" + cards
+		if h.mgr.reader != nil {
+			if card, _ := h.mgr.cardPick.Pick(ctx, mb.record); card != nil {
+				text += "\n\n" + botconfig.FormatCard(card)
+			} else if cards := h.mgr.reader.CardNumbersText(ctx, mb.record.ID); cards != "" {
+				text += "\n\n" + cards
+			}
 		}
 		_, err := mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text})
 		return err
@@ -371,19 +419,121 @@ func (h *Handlers) handleCallback(ctx context.Context, mb *managedBot, upd *mode
 		})
 		return err
 	}
+	if strings.HasPrefix(cq.Data, "pay:wallet:") {
+		var planID int64
+		fmt.Sscanf(cq.Data, "pay:wallet:%d", &planID)
+		return h.buyPlan(ctx, mb, user, chatID, planID)
+	}
+	if strings.HasPrefix(cq.Data, "pay:card:") {
+		var planID int64
+		fmt.Sscanf(cq.Data, "pay:card:%d", &planID)
+		return h.startCardPlanBuy(ctx, mb, user, chatID, planID)
+	}
+	if strings.HasPrefix(cq.Data, "pay:approve:") {
+		var botID, payID int64
+		fmt.Sscanf(cq.Data, "pay:approve:%d:%d", &botID, &payID)
+		return h.approvePaymentCallback(ctx, mb, cq.From.ID, chatID, botID, payID)
+	}
+	if strings.HasPrefix(cq.Data, "pay:reject:") {
+		var botID, payID int64
+		fmt.Sscanf(cq.Data, "pay:reject:%d:%d", &botID, &payID)
+		return h.rejectPaymentCallback(ctx, mb, cq.From.ID, chatID, botID, payID)
+	}
 	if len(cq.Data) > 5 && cq.Data[:5] == "plan:" {
 		var planID int64
 		fmt.Sscanf(cq.Data, "plan:%d", &planID)
-		return h.buyPlan(ctx, mb, user, chatID, planID)
+		return h.selectPayMethod(ctx, mb, user, chatID, planID)
 	}
 	return nil
 }
 
+func (h *Handlers) selectPayMethod(ctx context.Context, mb *managedBot, user *db.EndUser, chatID int64, planID int64) error {
+	plan, err := h.mgr.store.GetPlan(ctx, mb.record.ID, planID)
+	if err != nil {
+		return err
+	}
+	text := i18n.T(user.Lang, "pay_method_select", plan.Name, plan.PriceToman)
+	kb := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{
+		{{Text: i18n.T(user.Lang, "btn_pay_wallet"), CallbackData: fmt.Sprintf("pay:wallet:%d", planID)}},
+		{{Text: i18n.T(user.Lang, "btn_pay_card"), CallbackData: fmt.Sprintf("pay:card:%d", planID)}},
+		{{Text: "«", CallbackData: "plans"}},
+	}}
+	_, err = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text, ReplyMarkup: kb})
+	return err
+}
+
+func (h *Handlers) startCardPlanBuy(ctx context.Context, mb *managedBot, user *db.EndUser, chatID int64, planID int64) error {
+	plan, err := h.mgr.store.GetPlan(ctx, mb.record.ID, planID)
+	if err != nil {
+		return err
+	}
+	h.mgr.states.set(stateKey(mb.record.ID, user.ID), userState{Step: "buy_receipt", PlanID: planID})
+	text := i18n.T(user.Lang, "plan_card_instructions", plan.PriceToman)
+	if card, _ := h.mgr.cardPick.Pick(ctx, mb.record); card != nil {
+		text += "\n\n" + botconfig.FormatCard(card)
+	} else if h.mgr.reader != nil {
+		if cards := h.mgr.reader.CardNumbersText(ctx, mb.record.ID); cards != "" {
+			text += "\n\n" + cards
+		}
+	}
+	text += "\n\n" + i18n.T(user.Lang, "topup_send_receipt")
+	_, err = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text})
+	return err
+}
+
+func (h *Handlers) finishPlanReceipt(ctx context.Context, mb *managedBot, user *db.EndUser, chatID int64, st userState, fileID string) error {
+	h.mgr.states.clear(stateKey(mb.record.ID, user.ID))
+	plan, err := h.mgr.store.GetPlan(ctx, mb.record.ID, st.PlanID)
+	if err != nil {
+		return err
+	}
+	payment, err := h.mgr.orders.CreatePlanOrderPayment(ctx, mb.record.ID, user, plan, fileID)
+	if err != nil {
+		return err
+	}
+	_, err = mb.api.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID, Text: i18n.T(user.Lang, "topup_pending"),
+	})
+	if err != nil {
+		return err
+	}
+	h.notifyApprover(ctx, mb, payment)
+	return nil
+}
+
+func (h *Handlers) approvePaymentCallback(ctx context.Context, mb *managedBot, tgID, chatID, botID, payID int64) error {
+	if h.mgr.reader == nil || !h.mgr.reader.IsApprover(ctx, botID, tgID) {
+		_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "Forbidden"})
+		return nil
+	}
+	res, err := h.mgr.review.ApprovePaymentAndProvision(ctx, botID, payID, 0)
+	if err != nil {
+		_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: err.Error()})
+		return nil
+	}
+	msg := "Approved"
+	if res.Provisioned && res.Service != nil {
+		msg = "Provisioned: " + res.Service.SubLink
+	}
+	_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: msg})
+	return nil
+}
+
+func (h *Handlers) rejectPaymentCallback(ctx context.Context, mb *managedBot, tgID, chatID, botID, payID int64) error {
+	if h.mgr.reader == nil || !h.mgr.reader.IsApprover(ctx, botID, tgID) {
+		return nil
+	}
+	_ = h.mgr.review.RejectPayment(ctx, botID, payID, 0)
+	_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "Rejected"})
+	return nil
+}
+
 func (h *Handlers) sendMainMenu(ctx context.Context, mb *managedBot, user *db.EndUser, chatID int64) error {
-	welcome, _ := h.mgr.store.GetSetting(ctx, "bot", mb.record.ID, "welcome_text")
 	msg := i18n.T(user.Lang, "start_welcome")
-	if welcome != "" {
-		msg = welcome
+	if h.mgr.reader != nil {
+		if welcome := h.mgr.reader.WelcomeText(ctx, mb.record.ID, user.Lang); welcome != "" {
+			msg = welcome
+		}
 	}
 	msg += "\n" + i18n.T(user.Lang, "main_menu")
 	kb := &models.InlineKeyboardMarkup{
@@ -539,20 +689,37 @@ func (l *topUpLimiter) allow() bool {
 }
 
 func (h *Handlers) notifyApprover(ctx context.Context, mb *managedBot, payment *db.Payment) {
-	var chatID int64
-	if id, ok := approverID(ctx, h.mgr.store, mb.record.ID); ok {
-		chatID = id
-	} else {
-		botRec, err := h.mgr.store.GetBot(ctx, mb.record.ID)
-		if err != nil {
-			return
-		}
-		agent, err := h.mgr.store.GetAgent(ctx, botRec.AgentID)
-		if err != nil || agent.TgAdminID == nil {
-			return
-		}
-		chatID = *agent.TgAdminID
+	var ids []int64
+	if h.mgr.reader != nil {
+		ids = h.mgr.reader.ApproverIDs(ctx, mb.record.ID)
 	}
-	text := fmt.Sprintf("New top-up pending: bot=%d payment=%d amount=%d", payment.BotID, payment.ID, payment.AmountToman)
-	_ = h.mgr.SendMessage(ctx, mb.record.PublicID, chatID, text)
+	if len(ids) == 0 {
+		if id, ok := approverID(ctx, h.mgr.store, mb.record.ID); ok {
+			ids = []int64{id}
+		} else {
+			botRec, err := h.mgr.store.GetBot(ctx, mb.record.ID)
+			if err != nil {
+				return
+			}
+			agent, err := h.mgr.store.GetAgent(ctx, botRec.AgentID)
+			if err != nil || agent.TgAdminID == nil {
+				return
+			}
+			ids = []int64{*agent.TgAdminID}
+		}
+	}
+	kind := "top-up"
+	if payment.OrderID != nil {
+		kind = "plan purchase"
+	}
+	text := fmt.Sprintf("Pending %s: payment #%d amount %d", kind, payment.ID, payment.AmountToman)
+	kb := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{
+		{
+			{Text: "Approve", CallbackData: fmt.Sprintf("pay:approve:%d:%d", payment.BotID, payment.ID)},
+			{Text: "Reject", CallbackData: fmt.Sprintf("pay:reject:%d:%d", payment.BotID, payment.ID)},
+		},
+	}}
+	for _, chatID := range ids {
+		_ = h.mgr.sendRichMessage(ctx, mb.record.PublicID, chatID, text, kb)
+	}
 }

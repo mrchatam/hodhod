@@ -115,7 +115,12 @@ func (s *Server) approvePayment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	_ = s.Store.ApprovePayment(r.Context(), botID, id, admin.ID)
+	_, err := s.Review.ApprovePaymentAndProvision(r.Context(), botID, id, admin.ID)
+	if err != nil {
+		s.setFlash(w, "err", err.Error())
+		http.Redirect(w, r, "/payments/pending", http.StatusSeeOther)
+		return
+	}
 	s.audit(r, &admin.ID, "approve_payment", "payment", id, map[string]any{"bot_id": botID})
 	s.notifyPaymentReviewed(r, botID, id)
 	s.setFlash(w, "ok", "Payment approved")
@@ -130,7 +135,7 @@ func (s *Server) rejectPayment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	_ = s.Store.RejectPayment(r.Context(), botID, id, admin.ID)
+	_ = s.Review.RejectPayment(r.Context(), botID, id, admin.ID)
 	s.audit(r, &admin.ID, "reject_payment", "payment", id, map[string]any{"bot_id": botID})
 	s.notifyPaymentReviewed(r, botID, id)
 	s.setFlash(w, "ok", "Payment rejected")

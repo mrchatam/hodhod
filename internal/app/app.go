@@ -14,8 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/mrchatam/hodhod/internal/billing"
 	"github.com/mrchatam/hodhod/internal/backup"
+	"github.com/mrchatam/hodhod/internal/billing"
+	"github.com/mrchatam/hodhod/internal/botconfig"
 	"github.com/mrchatam/hodhod/internal/config"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -57,7 +58,14 @@ func Run() error {
 	store := db.NewStore(gdb)
 
 	ctx := context.Background()
-	if err := seedMaster(ctx, store, cfg.MasterUsername, cfg.MasterPassword); err != nil {
+	if cfg.MasterPassword != "" {
+		if err := BootstrapAdmin(ctx, store, cfg.MasterUsername, cfg.MasterPassword); err != nil {
+			slog.Warn("MASTER_PASSWORD bootstrap", "err", err)
+		} else {
+			slog.Warn("MASTER_PASSWORD is deprecated — use hodhod bootstrap-admin instead")
+		}
+	}
+	if err := EnsureMasterExists(ctx, store); err != nil {
 		return err
 	}
 
@@ -77,13 +85,16 @@ func Run() error {
 	wallet := &billing.WalletService{Store: store}
 	orders := &billing.OrderService{Store: store, Wallet: wallet}
 	prov := &provisioning.Service{Store: store, Sales: salesSvc}
-	tgMgr := telegram.NewManager(cfg, box, store, httpClient, orders, wallet, prov)
+	review := &billing.PaymentReviewService{Store: store, Wallet: wallet, Orders: orders, Prov: prov}
+	botReader := &botconfig.Reader{Store: store}
+	cardPick := &botconfig.CardPicker{Store: store}
+	tgMgr := telegram.NewManager(cfg, box, store, httpClient, orders, wallet, prov, review, botReader, cardPick)
 
 	if err := tgMgr.LoadActive(ctx); err != nil {
 		slog.Warn("load bots", "err", err)
 	}
 
-	webSrv, err := webpkg.NewServer(cfg, store, box, panelReg, tgMgr, salesSvc, backupSvc)
+	webSrv, err := webpkg.NewServer(cfg, store, box, panelReg, tgMgr, salesSvc, backupSvc, wallet, orders, review)
 	if err != nil {
 		return err
 	}

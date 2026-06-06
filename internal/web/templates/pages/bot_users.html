@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <h2 class="text-2xl font-bold">@{{.Bot.Username}} — {{T .Lang "bots.users"}}</h2>
+  <a href="{{.Scope.Base}}/bots" class="btn btn-muted btn-sm">{{T .Lang "common.back"}}</a>
+</div>
+
+<form method="get" class="card p-4 mb-4 flex flex-wrap gap-3 items-end">
+  <label class="form-field flex-1 min-w-[10rem]"><span class="form-label">Telegram ID</span><input name="tg_id" value="{{.TgFilter}}" class="form-input"></label>
+  <button type="submit" class="btn btn-secondary">{{T .Lang "common.filter"}}</button>
+</form>
+
+<div class="card overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead><tr class="border-b" style="border-color:var(--color-border)">
+      <th class="text-start p-3">TG ID</th><th class="text-start p-3">{{T .Lang "table.username"}}</th><th class="text-start p-3">{{T .Lang "nav.payments"}}</th><th class="text-start p-3">{{T .Lang "common.status"}}</th><th></th>
+    </tr></thead>
+    <tbody>
+    {{range .Users}}
+    <tr class="border-b" style="border-color:var(--color-border)">
+      <td class="p-3">{{.TelegramID}}</td>
+      <td class="p-3">{{.Username}}</td>
+      <td class="p-3">{{toman .BalanceToman}}</td>
+      <td class="p-3">{{.Status}}</td>
+      <td class="p-3"><a href="{{$.Scope.Base}}/bots/{{$.Bot.ID}}/users/{{.ID}}" class="btn btn-secondary btn-sm">{{T $.Lang "common.edit"}}</a></td>
+    </tr>
+    {{else}}<tr><td colspan="5" class="p-6 text-center opacity-60">{{T .Lang "empty.default"}}</td></tr>{{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

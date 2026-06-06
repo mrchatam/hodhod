@@ -190,15 +190,19 @@ type PanelBackup struct {
 }
 
 type Bot struct {
-	ID            int64          `gorm:"primaryKey"`
-	AgentID       int64          `gorm:"not null;index"`
-	PublicID      string         `gorm:"uniqueIndex;not null"`
-	Username      string         `gorm:"not null;default:''"`
-	TokenEnc      string         `gorm:"not null"`
-	WebhookSecret string         `gorm:"not null"`
-	Status        string         `gorm:"not null;default:active"`
-	SettingsJSON  datatypes.JSON `gorm:"type:jsonb;default:'{}'"`
-	CreatedAt     time.Time
+	ID               int64          `gorm:"primaryKey"`
+	AgentID          int64          `gorm:"not null;index"`
+	PublicID         string         `gorm:"uniqueIndex;not null"`
+	Username         string         `gorm:"not null;default:''"`
+	TokenEnc         string         `gorm:"not null"`
+	WebhookSecret    string         `gorm:"not null"`
+	Status           string         `gorm:"not null;default:active"`
+	SettingsJSON     datatypes.JSON `gorm:"type:jsonb;default:'{}'"`
+	CardDisplayMode  string         `gorm:"not null;default:random"`
+	CardRRIndex      int            `gorm:"not null;default:0"`
+	WebhookLastError string         `gorm:"not null;default:''"`
+	DeletedAt        *time.Time
+	CreatedAt        time.Time
 }
 
 type BotPanel struct {
@@ -209,25 +213,32 @@ type BotPanel struct {
 }
 
 type Plan struct {
-	ID           int64 `gorm:"primaryKey"`
-	BotID        int64 `gorm:"not null;index"`
-	AgentID      int64 `gorm:"not null"`
+	ID           int64  `gorm:"primaryKey"`
+	BotID        int64  `gorm:"not null;index"`
+	AgentID      int64  `gorm:"not null"`
 	PanelID      *int64
 	Name         string `gorm:"not null"`
+	Description  string `gorm:"not null;default:''"`
 	DurationDays int    `gorm:"not null"`
 	VolumeGB     int    `gorm:"not null"`
 	PriceToman   int64  `gorm:"not null"`
+	SortOrder    int    `gorm:"not null;default:0"`
+	IsTrial      bool   `gorm:"not null;default:false"`
 	Status       string `gorm:"not null;default:active"`
 	CreatedAt    time.Time
 }
 
 type EndUser struct {
-	ID           int64  `gorm:"primaryKey"`
-	BotID        int64  `gorm:"not null;uniqueIndex:idx_bot_tg"`
-	TelegramID   int64  `gorm:"not null;uniqueIndex:idx_bot_tg"`
-	Lang         string `gorm:"not null;default:fa"`
-	BalanceToman int64  `gorm:"not null;default:0"`
-	WarnPercent  int    `gorm:"not null;default:80"`
+	ID           int64      `gorm:"primaryKey"`
+	BotID        int64      `gorm:"not null;uniqueIndex:idx_bot_tg"`
+	TelegramID   int64      `gorm:"not null;uniqueIndex:idx_bot_tg"`
+	Username     string     `gorm:"not null;default:''"`
+	Lang         string     `gorm:"not null;default:fa"`
+	Status       string     `gorm:"not null;default:active"`
+	BalanceToman int64      `gorm:"not null;default:0"`
+	WarnPercent  int        `gorm:"not null;default:80"`
+	TrialUsedAt  *time.Time
+	TrialCount   int        `gorm:"not null;default:0"`
 	CreatedAt    time.Time
 }
 
@@ -251,15 +262,17 @@ func (s OrderStatus) Valid() bool {
 }
 
 type Order struct {
-	ID         int64       `gorm:"primaryKey"`
-	BotID      int64       `gorm:"not null;index"`
-	EndUserID  int64       `gorm:"not null"`
-	PlanID     int64       `gorm:"not null"`
-	Status     OrderStatus `gorm:"not null"`
-	PriceToman int64       `gorm:"not null"`
-	CreatedAt  time.Time
-	ApprovedBy *int64
-	ApprovedAt *time.Time
+	ID            int64       `gorm:"primaryKey"`
+	BotID         int64       `gorm:"not null;index"`
+	EndUserID     int64       `gorm:"not null"`
+	PlanID        int64       `gorm:"not null"`
+	Status        OrderStatus `gorm:"not null"`
+	PriceToman    int64       `gorm:"not null"`
+	PaymentMethod string      `gorm:"not null;default:wallet"`
+	IsTrial       bool        `gorm:"not null;default:false"`
+	CreatedAt     time.Time
+	ApprovedBy    *int64
+	ApprovedAt    *time.Time
 }
 
 type PaymentStatus string
@@ -317,8 +330,9 @@ type Service struct {
 	UsedBytes         int64  `gorm:"not null;default:0"`
 	ExpireAt          *time.Time
 	Status            string `gorm:"not null;default:active"`
-	LastWarnedPercent int    `gorm:"not null;default:0"`
-	CreatedAt         time.Time
+	LastWarnedPercent   int        `gorm:"not null;default:0"`
+	LastExpiryWarnedAt  *time.Time
+	CreatedAt           time.Time
 }
 
 type Setting struct {
@@ -345,4 +359,56 @@ type Session struct {
 	CSRFToken string    `gorm:"not null"`
 	ExpiresAt time.Time `gorm:"not null"`
 	CreatedAt time.Time
+}
+
+type BotPaymentCard struct {
+	ID         int64     `gorm:"primaryKey"`
+	BotID      int64     `gorm:"not null;index"`
+	Label      string    `gorm:"not null;default:''"`
+	CardNumber string    `gorm:"not null"`
+	HolderName string    `gorm:"not null;default:''"`
+	Weight     int       `gorm:"not null;default:1"`
+	SortOrder  int       `gorm:"not null;default:0"`
+	Active     bool      `gorm:"not null;default:true"`
+	CreatedAt  time.Time
+}
+
+type BotChannel struct {
+	ID        int64  `gorm:"primaryKey"`
+	BotID     int64  `gorm:"not null;index"`
+	Username  string `gorm:"not null"`
+	Label     string `gorm:"not null;default:''"`
+	JoinURL   string `gorm:"not null;default:''"`
+	Mandatory bool   `gorm:"not null;default:true"`
+	SortOrder int    `gorm:"not null;default:0"`
+	Active    bool   `gorm:"not null;default:true"`
+}
+
+type BotMenuButton struct {
+	ID        int64  `gorm:"primaryKey"`
+	BotID     int64  `gorm:"not null;index"`
+	ButtonKey string `gorm:"not null"`
+	LabelFa   string `gorm:"not null;default:''"`
+	LabelEn   string `gorm:"not null;default:''"`
+	Enabled   bool   `gorm:"not null;default:true"`
+	SortOrder int    `gorm:"not null;default:0"`
+	URL       string `gorm:"not null;default:''"`
+}
+
+type BotNotificationTarget struct {
+	ID         int64          `gorm:"primaryKey"`
+	BotID      int64          `gorm:"not null;index"`
+	TelegramID int64          `gorm:"not null"`
+	Events     datatypes.JSON `gorm:"type:jsonb;default:'[]'"`
+	CreatedAt  time.Time
+}
+
+// BotListRow aggregates dashboard stats for bot list UI.
+type BotListRow struct {
+	Bot            Bot
+	PendingCount   int64
+	ServiceCount   int64
+	EndUserCount   int64
+	AgentName      string
+	WebhookStatus  string
 }

@@ -59,6 +59,31 @@ func (s *OrderService) CreateTopUpPayment(ctx context.Context, botID, endUserID,
 	return p, s.Store.CreatePayment(ctx, p)
 }
 
+// CreatePlanOrderPayment creates an order awaiting approval and linked payment with receipt.
+func (s *OrderService) CreatePlanOrderPayment(ctx context.Context, botID int64, user *db.EndUser, plan *db.Plan, receiptRef string) (*db.Payment, error) {
+	o := &db.Order{
+		BotID:         botID,
+		EndUserID:     user.ID,
+		PlanID:        plan.ID,
+		Status:        db.OrderAwaitingApproval,
+		PriceToman:    plan.PriceToman,
+		PaymentMethod: "card_receipt",
+	}
+	if err := s.Store.CreateOrder(ctx, o); err != nil {
+		return nil, err
+	}
+	p := &db.Payment{
+		BotID:       botID,
+		EndUserID:   user.ID,
+		OrderID:     &o.ID,
+		AmountToman: plan.PriceToman,
+		Method:      "card_receipt",
+		ReceiptRef:  receiptRef,
+		Status:      db.PaymentPending,
+	}
+	return p, s.Store.CreatePayment(ctx, p)
+}
+
 // MarkOrderProvisioned updates order status after provisioning.
 func (s *OrderService) MarkOrderProvisioned(ctx context.Context, botID, orderID int64) error {
 	o, err := s.Store.GetOrder(ctx, botID, orderID)

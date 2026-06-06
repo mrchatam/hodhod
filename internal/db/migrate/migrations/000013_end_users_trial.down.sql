@@ -1,0 +1,10 @@
+ALTER TABLE services DROP COLUMN IF EXISTS last_expiry_warned_at;
+ALTER TABLE orders DROP COLUMN IF EXISTS payment_method;
+ALTER TABLE orders DROP COLUMN IF EXISTS is_trial;
+ALTER TABLE plans DROP COLUMN IF EXISTS is_trial;
+ALTER TABLE plans DROP COLUMN IF EXISTS description;
+ALTER TABLE plans DROP COLUMN IF EXISTS sort_order;
+ALTER TABLE end_users DROP COLUMN IF EXISTS trial_count;
+ALTER TABLE end_users DROP COLUMN IF EXISTS trial_used_at;
+ALTER TABLE end_users DROP COLUMN IF EXISTS username;
+ALTER TABLE end_users DROP COLUMN IF EXISTS status;

@@ -1,0 +1,2 @@
+ALTER TABLE bots DROP COLUMN IF EXISTS webhook_last_error;
+ALTER TABLE bots DROP COLUMN IF EXISTS deleted_at;

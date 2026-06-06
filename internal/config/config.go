@@ -23,7 +23,7 @@ type Config struct {
 	SessionSecret      string `env:"SESSION_SECRET,required"`
 	LogLevel           string `env:"LOG_LEVEL" envDefault:"info"`
 	MasterUsername     string `env:"MASTER_USERNAME" envDefault:"admin"`
-	MasterPassword     string `env:"MASTER_PASSWORD,required"`
+	MasterPassword     string `env:"MASTER_PASSWORD"`
 	CronUsagePoll      string `env:"CRON_USAGE_POLL" envDefault:"@every 5m"`
 	CronExpiryCheck    string `env:"CRON_EXPIRY_CHECK" envDefault:"@every 1h"`
 	CronBackup         string `env:"CRON_BACKUP" envDefault:"0 3 * * *"`
@@ -58,9 +58,6 @@ func (c *Config) validate() error {
 	}
 	if c.SessionSecret == "" {
 		missing = append(missing, "SESSION_SECRET")
-	}
-	if c.MasterPassword == "" {
-		missing = append(missing, "MASTER_PASSWORD")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("config: missing required: %s", strings.Join(missing, ", "))

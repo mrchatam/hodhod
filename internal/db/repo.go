@@ -149,12 +149,12 @@ func (s *Store) ListPanelBotRows(ctx context.Context, panelID int64) ([]PanelBot
 
 func (s *Store) ListActiveBots(ctx context.Context) ([]Bot, error) {
 	var out []Bot
-	return out, s.DB.WithContext(ctx).Where("status = ?", "active").Find(&out).Error
+	return out, s.DB.WithContext(ctx).Where("status = ? AND deleted_at IS NULL", "active").Find(&out).Error
 }
 
 func (s *Store) ListBotsByAgent(ctx context.Context, agentID int64) ([]Bot, error) {
 	var out []Bot
-	return out, s.DB.WithContext(ctx).Where("agent_id = ?", agentID).Find(&out).Error
+	return out, s.DB.WithContext(ctx).Where("agent_id = ? AND deleted_at IS NULL", agentID).Order("id DESC").Find(&out).Error
 }
 
 func (s *Store) CountBotsByAgent(ctx context.Context, agentID int64) (int64, error) {
@@ -304,6 +304,10 @@ func (s *Store) GetPayment(ctx context.Context, botID, id int64) (*Payment, erro
 	var p Payment
 	err := s.DB.WithContext(ctx).Where("bot_id = ? AND id = ?", botID, id).First(&p).Error
 	return &p, err
+}
+
+func (s *Store) UpdatePayment(ctx context.Context, botID int64, p *Payment) error {
+	return s.DB.WithContext(ctx).Where("bot_id = ? AND id = ?", botID, p.ID).Save(p).Error
 }
 
 func (s *Store) ListPendingPayments(ctx context.Context, botID int64) ([]Payment, error) {
@@ -497,6 +501,14 @@ func (s *Store) GetSession(ctx context.Context, id string) (*Session, error) {
 
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	return s.DB.WithContext(ctx).Delete(&Session{}, "id = ?", id).Error
+}
+
+func (s *Store) DeleteSessionsByAdminExcept(ctx context.Context, adminID int64, keepSessionID string) error {
+	q := s.DB.WithContext(ctx).Where("admin_id = ?", adminID)
+	if keepSessionID != "" {
+		q = q.Where("id <> ?", keepSessionID)
+	}
+	return q.Delete(&Session{}).Error
 }
 
 // --- Audit ---
