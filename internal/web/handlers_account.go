@@ -32,5 +32,9 @@ func (s *Server) postAccountTheme(w http.ResponseWriter, r *http.Request) {
 		theme = "system"
 	}
 	_ = s.Store.SetSetting(r.Context(), "admin", admin.ID, "theme", theme)
-	http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
+	ref := r.Header.Get("Referer")
+	if ref == "" {
+		ref = "/"
+	}
+	http.Redirect(w, r, ref, http.StatusSeeOther)
 }
