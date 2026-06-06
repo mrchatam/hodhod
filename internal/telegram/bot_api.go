@@ -2,8 +2,10 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -22,6 +24,28 @@ func (m *Manager) HTTPClient() *http.Client { return m.http }
 
 var botTokenRE = regexp.MustCompile(`^\d+:[A-Za-z0-9_-]+$`)
 
+var telegramAPIBase = "https://api.telegram.org"
+
+const (
+	telegramPollTimeout = time.Minute
+	telegramInitTimeout = 30 * time.Second
+)
+
+func telegramBotOptions(httpClient *http.Client, skipInitGetMe bool) []bot.Option {
+	client := httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	opts := []bot.Option{
+		bot.WithHTTPClient(telegramPollTimeout, client),
+		bot.WithCheckInitTimeout(telegramInitTimeout),
+	}
+	if skipInitGetMe {
+		opts = append(opts, bot.WithSkipGetMe())
+	}
+	return opts
+}
+
 // ValidateToken checks a bot token via getMe and returns the bot username.
 func ValidateToken(ctx context.Context, box *crypto.Box, token string, httpClient *http.Client) (string, error) {
 	token = strings.TrimSpace(token)
@@ -37,20 +61,14 @@ func ValidateToken(ctx context.Context, box *crypto.Box, token string, httpClien
 		"hasReqDeadline": hasReqDeadline,
 		"reqDeadlineMs":  deadlineMs(reqCtxDeadline, hasReqDeadline),
 		"clientTimeoutSec": clientTimeoutSec(httpClient),
+		"initTimeoutSec": telegramInitTimeout.Seconds(),
 		"usesCustomTransport": httpClient != nil && httpClient.Transport != nil,
 	})
 	start := time.Now()
 	// #endregion
-	api, err := bot.New(token, bot.WithHTTPClient(15, httpClient))
-	if err != nil {
-		// #region agent log
-		debuglog.Write("D", "telegram/bot_api.go:ValidateToken", "bot.New failed", map[string]any{
-			"err": err.Error(), "elapsedMs": time.Since(start).Milliseconds(),
-		})
-		// #endregion
-		return "", FriendlyTokenError(err)
-	}
-	me, err := api.GetMe(ctx)
+	valCtx, cancel := context.WithTimeout(context.Background(), telegramInitTimeout)
+	defer cancel()
+	username, err := getMeViaHTTP(valCtx, httpClient, token)
 	elapsed := time.Since(start).Milliseconds()
 	if err != nil {
 		// #region agent log
@@ -62,13 +80,83 @@ func ValidateToken(ctx context.Context, box *crypto.Box, token string, httpClien
 	}
 	// #region agent log
 	debuglog.Write("B", "telegram/bot_api.go:ValidateToken", "getMe ok", map[string]any{
-		"elapsedMs": elapsed, "hasUsername": me.Username != "",
+		"elapsedMs": elapsed, "hasUsername": username != "",
 	})
 	// #endregion
-	if me.Username == "" {
+	if username == "" {
 		return "", fmt.Errorf("bot has no @username — set one in @BotFather")
 	}
-	return me.Username, nil
+	return username, nil
+}
+
+type getMeResponse struct {
+	OK     bool `json:"ok"`
+	Result struct {
+		Username string `json:"username"`
+	} `json:"result"`
+	Description string `json:"description"`
+}
+
+func getMeViaHTTP(ctx context.Context, httpClient *http.Client, token string) (string, error) {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	dnsStart := time.Now()
+	addrs, dnsErr := net.DefaultResolver.LookupHost(ctx, "api.telegram.org")
+	// #region agent log
+	debuglog.Write("F", "telegram/bot_api.go:getMeViaHTTP", "dns lookup", map[string]any{
+		"addrs": addrs, "elapsedMs": time.Since(dnsStart).Milliseconds(), "err": errString(dnsErr),
+	})
+	// #endregion
+	if dnsErr != nil {
+		return "", dnsErr
+	}
+
+	u := telegramAPIBase + "/bot" + token + "/getMe"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, http.NoBody)
+	if err != nil {
+		return "", err
+	}
+	httpStart := time.Now()
+	resp, err := httpClient.Do(req)
+	httpElapsed := time.Since(httpStart).Milliseconds()
+	if err != nil {
+		// #region agent log
+		debuglog.Write("G", "telegram/bot_api.go:getMeViaHTTP", "http do failed", map[string]any{
+			"elapsedMs": httpElapsed, "err": err.Error(),
+		})
+		// #endregion
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	// #region agent log
+	debuglog.Write("H", "telegram/bot_api.go:getMeViaHTTP", "http response", map[string]any{
+		"status": resp.StatusCode, "contentType": resp.Header.Get("Content-Type"),
+		"bodyLen": len(body), "elapsedMs": httpElapsed, "readErr": errString(readErr),
+	})
+	// #endregion
+	if readErr != nil {
+		return "", readErr
+	}
+	var payload getMeResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", fmt.Errorf("unexpected Telegram response (status %d)", resp.StatusCode)
+	}
+	if !payload.OK {
+		if resp.StatusCode == http.StatusUnauthorized || strings.Contains(strings.ToLower(payload.Description), "not found") {
+			return "", fmt.Errorf("not found: %s", payload.Description)
+		}
+		return "", fmt.Errorf("telegram API error: %s", payload.Description)
+	}
+	return payload.Result.Username, nil
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func deadlineMs(t time.Time, ok bool) int64 {
@@ -94,9 +182,11 @@ func FriendlyTokenError(err error) error {
 	switch {
 	case strings.Contains(msg, "not found"), strings.Contains(msg, "404"):
 		return fmt.Errorf("invalid or revoked bot token — copy a fresh token from @BotFather")
+	case strings.Contains(msg, "deadline exceeded"), strings.Contains(msg, "context deadline"):
+		return fmt.Errorf("cannot reach Telegram API (timed out) — verify the server can connect to api.telegram.org; if using Docker + VPN, check container outbound NAT")
 	case strings.Contains(msg, "timeout"), strings.Contains(msg, "connection refused"),
 		strings.Contains(msg, "no such host"), strings.Contains(msg, "network"):
-		return fmt.Errorf("cannot reach Telegram API — check server network or PROXY_URL")
+		return fmt.Errorf("cannot reach Telegram API — check server network and firewall")
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"):
 		return fmt.Errorf("invalid bot token — verify the token from @BotFather")
 	default:
@@ -115,7 +205,7 @@ func (m *Manager) WebhookInfo(ctx context.Context, botID int64) (url, status str
 	if err != nil {
 		return url, "error"
 	}
-	api, err := bot.New(token, bot.WithHTTPClient(15, m.http))
+	api, err := bot.New(token, telegramBotOptions(m.http, false)...)
 	if err != nil {
 		return url, "error"
 	}
@@ -142,7 +232,7 @@ func (m *Manager) FetchFile(ctx context.Context, botID int64, fileID string) ([]
 	if err != nil {
 		return nil, "", err
 	}
-	api, err := bot.New(token, bot.WithHTTPClient(15, m.http))
+	api, err := bot.New(token, telegramBotOptions(m.http, false)...)
 	if err != nil {
 		return nil, "", err
 	}

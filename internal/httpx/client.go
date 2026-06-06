@@ -22,21 +22,18 @@ type Config struct {
 // New returns a proxy-aware HTTP client. Empty ProxyURL uses direct connection.
 func New(cfg Config) (*http.Client, error) {
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 15 * time.Second
+		cfg.Timeout = 30 * time.Second
 	}
-	transport := &http.Transport{
-		MaxIdleConns:        100,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
+	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport.TLSHandshakeTimeout = 10 * time.Second
 	if cfg.ProxyURL != "" {
 		dialer, err := socksDialer(cfg.ProxyURL)
 		if err != nil {
 			return nil, err
 		}
-		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		baseTransport.DialContext = instrumentDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return dialer.Dial(network, addr)
-		}
+		})
 		// #region agent log
 		host := proxyHost(cfg.ProxyURL)
 		debuglog.Write("A", "httpx/client.go:New", "outbound client with proxy", map[string]any{
@@ -44,6 +41,8 @@ func New(cfg Config) (*http.Client, error) {
 		})
 		// #endregion
 	} else {
+		netDialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		baseTransport.DialContext = instrumentDial(netDialer.DialContext)
 		// #region agent log
 		debuglog.Write("A", "httpx/client.go:New", "outbound client direct (no proxy)", map[string]any{
 			"timeoutSec": cfg.Timeout.Seconds(),
@@ -52,8 +51,29 @@ func New(cfg Config) (*http.Client, error) {
 	}
 	return &http.Client{
 		Timeout:   cfg.Timeout,
-		Transport: transport,
+		Transport: baseTransport,
 	}, nil
+}
+
+func instrumentDial(dial func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		start := time.Now()
+		conn, err := dial(ctx, network, addr)
+		// #region agent log
+		debuglog.Write("I", "httpx/client.go:DialContext", "tcp dial", map[string]any{
+			"network": network, "addr": addr, "elapsedMs": time.Since(start).Milliseconds(),
+			"ok": err == nil, "err": dialErr(err),
+		})
+		// #endregion
+		return conn, err
+	}
+}
+
+func dialErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func socksDialer(proxyURL string) (proxy.Dialer, error) {

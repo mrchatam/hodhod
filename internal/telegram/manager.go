@@ -90,10 +90,7 @@ func (m *Manager) Add(ctx context.Context, botID int64) error {
 	if err != nil {
 		return err
 	}
-	opts := []bot.Option{
-		bot.WithHTTPClient(15, m.http),
-	}
-	api, err := bot.New(token, opts...)
+	api, err := bot.New(token, telegramBotOptions(m.http, false)...)
 	if err != nil {
 		return err
 	}
