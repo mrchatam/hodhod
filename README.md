@@ -170,39 +170,35 @@ Docker Compose maps `host.docker.internal` to the host gateway so a local SOCKS 
 
 ### Docker container cannot reach Telegram (host curl works)
 
-**You should not need host-network mode for a normal install.** Older Hodhod releases worked on standard Docker bridge networking. Two separate issues were involved:
+Bridge containers timing out while host `curl` works is **not a Hodhod bug** — Docker is not SNATing container traffic (missing MASQUERADE). UFW is often **not** involved (your server has no `ufw` command).
 
-1. **Code (fixed in v0.1.0+):** token validation used a 5s library timeout — fixed by direct `getMe` with 30s.
-2. **Server Docker egress:** if bridge containers cannot open outbound TCP (common when UFW `FORWARD` is DROP), fix that first:
+Run diagnostics:
 
 ```bash
-# Test bridge egress (should return JSON, not timeout)
-docker run --rm curlimages/curl:8.5.0 -sS --max-time 10 "https://api.telegram.org/bot123:fake/getMe"
-
-# If host curl works but the command above times out, fix UFW then restart Docker:
-sudo sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
-sudo ufw reload
-sudo systemctl restart docker
+bash scripts/diagnose-docker-egress.sh
 ```
 
-Then revert to normal Docker mode in `.env`:
+Check `/etc/docker/daemon.json` for `"iptables": false` and restart Docker after any fix.
+
+**Recommended Hodhod fix — native mode** (app uses host network, same as working curl):
 
 ```env
+DEPLOY_MODE=native
 HODHOD_HOST_NETWORK=0
 ```
 
-Run `bash install.sh` → Update and add the bot again.
+Then `bash install.sh` → Update.
 
-**Last resort only** — if you cannot fix bridge egress:
+**Alternative — host-network Docker app:**
 
 ```env
+DEPLOY_MODE=docker
 HODHOD_HOST_NETWORK=1
 HODHOD_DB_HOST_PORT=15432
+HTTP_PORT=9000
 ```
 
-Ensure `HTTP_PORT` in `.env` matches what Nginx proxies to (e.g. `9000`). With host network the app binds that port directly on the host.
-
-Alternatively use `DEPLOY_MODE=native` (binary on host + Postgres in Docker only).
+Ensure `HTTP_PORT` matches Nginx. Then Update.
 
 ### Arvan CDN / reverse proxy
 

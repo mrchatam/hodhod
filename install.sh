@@ -614,7 +614,7 @@ wait_health() {
   return 1
 }
 
-# Bridge egress test — host curl can work while Docker FORWARD/UFW blocks containers.
+# Bridge egress test — host curl can work while container TCP egress is broken (SNAT/VPN/nftables).
 check_docker_egress() {
   [[ "$DEPLOY_MODE" == "native" ]] && return 0
   [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]] && return 0
@@ -628,8 +628,13 @@ check_docker_egress() {
     return 0
   fi
   ui_warn "Docker bridge egress FAILED (host curl may still work)."
-  ui_hint "Fix UFW: DEFAULT_FORWARD_POLICY=ACCEPT in /etc/default/ufw, then: sudo ufw reload && sudo systemctl restart docker"
-  ui_hint "Do not use HODHOD_HOST_NETWORK unless bridge egress cannot be fixed."
+  if command -v ufw >/dev/null 2>&1; then
+    ui_hint "UFW: set DEFAULT_FORWARD_POLICY=ACCEPT in /etc/default/ufw, then: sudo ufw reload && sudo systemctl restart docker"
+  else
+    ui_hint "UFW not installed — likely missing Docker SNAT/MASQUERADE (VPN/nftables). Run: bash scripts/diagnose-docker-egress.sh"
+  fi
+  ui_hint "Quick fix for Hodhod: set DEPLOY_MODE=native in .env and rerun Update (app uses host network like curl)."
+  ui_hint "Or set HODHOD_HOST_NETWORK=1 + HODHOD_DB_HOST_PORT=15432 (see README)."
   return 1
 }
 
