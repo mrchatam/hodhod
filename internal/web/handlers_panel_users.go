@@ -210,6 +210,10 @@ func (s *Server) postPanelUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := strconv.ParseInt(r.FormValue("agent_id"), 10, 64)
+	if agentID <= 0 {
+		s.panelUserCreateResponse(w, r, panelID, fmt.Errorf("agent required"), "Select an agent for Hodhod tracking")
+		return
+	}
 	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
 	if tpl, ok := findUserCreateTemplate(templates, r.FormValue("template_name")); ok {
 		if tpl.VolumeGB > 0 {
@@ -318,15 +322,10 @@ func (s *Server) panelUserEmail(r *http.Request) string {
 	return email
 }
 
-func (s *Server) panelUserAction(w http.ResponseWriter, r *http.Request, fn func(client panels.Client, email string) error) {
+func (s *Server) panelUserAction(w http.ResponseWriter, r *http.Request, fn func(context.Context, int64, string) error) {
 	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	email := s.panelUserEmail(r)
-	client, err := s.Panels.Get(r.Context(), panelID)
-	if err != nil {
-		s.panelUserHTMLError(w, err.Error())
-		return
-	}
-	if err = fn(client, email); err != nil {
+	if err := fn(r.Context(), panelID, email); err != nil {
 		if r.Header.Get("HX-Request") != "" {
 			s.panelUserHTMLError(w, err.Error())
 			return
@@ -354,6 +353,9 @@ func (s *Server) panelUserHTMLError(w http.ResponseWriter, msg string) {
 }
 
 func (s *Server) renderPanelUserRow(w http.ResponseWriter, r *http.Request, panelID int64, email string) {
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	agentScope := admin != nil && admin.Role == db.RoleAgent && admin.AgentID != nil
+
 	panel, _ := s.Store.GetPanel(r.Context(), panelID)
 	client, err := s.Panels.Get(r.Context(), panelID)
 	if err != nil {
@@ -365,12 +367,13 @@ func (s *Server) renderPanelUserRow(w http.ResponseWriter, r *http.Request, pane
 	for _, inb := range inbounds {
 		tagMap[inb.ID] = inb.Tag
 	}
-	row := PanelUserRow{Username: email, HodhodOnly: false, Source: "panel"}
+	row := PanelUserRow{Username: email, HodhodOnly: false, Source: "panel", PanelID: panelID}
 	if users, err := client.ListUsers(r.Context()); err == nil {
 		for _, u := range dedupePanelUsersByUsername(users) {
 			if u.Username == email {
 				row = panelUserRowFromPanel(u, tagMap)
 				row.Source = "panel"
+				row.PanelID = panelID
 				break
 			}
 		}
@@ -379,35 +382,58 @@ func (s *Server) renderPanelUserRow(w http.ResponseWriter, r *http.Request, pane
 		if u, err := client.GetUser(r.Context(), email); err == nil {
 			row = panelUserRowFromPanel(*u, tagMap)
 			row.Source = "panel"
+			row.PanelID = panelID
 		}
 	}
+	agents := s.agentNameMap(r.Context())
 	if svc, err := s.Store.GetServiceByPanelUsername(r.Context(), panelID, email); err == nil {
-		agents := s.agentNameMap(r.Context())
 		row = mergePanelUserWithService(row, *svc, agents)
 		if row.Source == "panel" {
 			row.Source = "both"
 		} else {
 			row.Source = "hodhod"
 		}
+		row.PanelID = panelID
 	}
+
+	pageName := "panel_edit"
 	data := s.baseData(r)
 	data["Panel"] = panel
 	data["Row"] = row
 	data["InboundTagMap"] = tagMap
-	data["IsMaster"] = true
-	data["Scope"] = "master-panel"
-	data["ShowOnline"] = true
-	data["ShowSource"] = true
-	data["ShowInbound"] = true
+	if agentScope {
+		agentID := *admin.AgentID
+		perms, _ := s.permsFor(r, admin)
+		data["Perms"] = perms
+		if visible, err := s.buildAgentVisibleUsers(r.Context(), agentID, panelID); err == nil {
+			if v, ok := visible[agentUserKeyStr(panelID, email)]; ok {
+				row.CanModify = agentCanModifyUser(v, s.agentHasModifyPerm(perms))
+				data["Row"] = row
+			}
+		}
+		data["IsMaster"] = false
+		data["Scope"] = "agent-panel"
+		data["ShowOnline"] = false
+		data["ShowSource"] = false
+		data["ShowInbound"] = false
+		pageName = "agent_panel_customers"
+	} else {
+		data["Agents"], _ = s.Store.ListAgents(r.Context())
+		data["IsMaster"] = true
+		data["Scope"] = "master-panel"
+		data["ShowOnline"] = true
+		data["ShowSource"] = true
+		data["ShowInbound"] = true
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	t, ok := s.pages["panel_edit"]
+	t, ok := s.pages[pageName]
 	if !ok {
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
 	}
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "user_row", data); err != nil {
-		slog.Error("template error", "partial", "panel_user_row", "err", err)
+		slog.Error("template error", "partial", "user_row", "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
 	}
@@ -443,20 +469,18 @@ func (s *Server) postPanelUserModify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) postPanelUserReset(w http.ResponseWriter, r *http.Request) {
-	s.panelUserAction(w, r, func(client panels.Client, email string) error {
-		return client.ResetUsage(r.Context(), email)
-	})
+	s.panelUserAction(w, r, s.Sales.ResetPanelUsage)
 }
 
 func (s *Server) postPanelUserDisable(w http.ResponseWriter, r *http.Request) {
-	s.panelUserAction(w, r, func(client panels.Client, email string) error {
-		return client.Disable(r.Context(), email)
+	s.panelUserAction(w, r, func(ctx context.Context, panelID int64, email string) error {
+		return s.Sales.SetPanelAccountEnabled(ctx, panelID, email, false)
 	})
 }
 
 func (s *Server) postPanelUserEnable(w http.ResponseWriter, r *http.Request) {
-	s.panelUserAction(w, r, func(client panels.Client, email string) error {
-		return client.Enable(r.Context(), email)
+	s.panelUserAction(w, r, func(ctx context.Context, panelID int64, email string) error {
+		return s.Sales.SetPanelAccountEnabled(ctx, panelID, email, true)
 	})
 }
 

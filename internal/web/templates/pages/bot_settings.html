@@ -121,11 +121,11 @@
 <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="tab" value="notify">
   <label class="form-field"><span class="form-label">{{T .Lang "bots.approver_id"}}</span><input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123,456"><p class="form-hint">{{T .Lang "form_hint.bot_approver"}}</p></label>
-  <label class="form-field"><span class="form-label">Expiry warn lead (days)</span><input name="expiry_warn_days" value="{{index .Settings "expiry_warn_days"}}" class="form-input" placeholder="2"><p class="form-hint">{{T .Lang "form_hint.bot_expiry_warn"}}</p></label>
-  <label class="flex items-center gap-2"><input type="checkbox" name="notify_receipt_pending" value="true" {{if eq (index .Settings "notify_receipt_pending") "true"}}checked{{end}}> Notify receipt pending</label>
-  <label class="flex items-center gap-2"><input type="checkbox" name="notify_purchase" value="true" {{if eq (index .Settings "notify_purchase") "true"}}checked{{end}}> Notify purchase</label>
-  <label class="flex items-center gap-2"><input type="checkbox" name="notify_new_user" value="true" {{if eq (index .Settings "notify_new_user") "true"}}checked{{end}}> Notify new user</label>
-  <label class="flex items-center gap-2"><input type="checkbox" name="notify_webhook_error" value="true" {{if eq (index .Settings "notify_webhook_error") "true"}}checked{{end}}> Notify webhook errors</label>
+  <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.expiry_warn_days"}}</span><input name="expiry_warn_days" value="{{index .Settings "expiry_warn_days"}}" class="form-input" placeholder="2"><p class="form-hint">{{T .Lang "form_hint.bot_expiry_warn"}}</p></label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_receipt_pending" value="true" {{if eq (index .Settings "notify_receipt_pending") "true"}}checked{{end}}> {{T .Lang "bot_settings.notify_receipt_pending"}}</label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_purchase" value="true" {{if eq (index .Settings "notify_purchase") "true"}}checked{{end}}> {{T .Lang "bot_settings.notify_purchase"}}</label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_new_user" value="true" {{if eq (index .Settings "notify_new_user") "true"}}checked{{end}}> {{T .Lang "bot_settings.notify_new_user"}}</label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_webhook_error" value="true" {{if eq (index .Settings "notify_webhook_error") "true"}}checked{{end}}> {{T .Lang "bot_settings.notify_webhook_error"}}</label>
   <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
 {{end}}
@@ -152,7 +152,7 @@
 {{if not .AgentPanels}}
 <div class="card p-6 max-w-lg">
   <p class="text-sm opacity-80">{{T .Lang "bot_settings.no_agent_panels"}}</p>
-  <a href="/master/agents/{{.Bot.AgentID}}#tab-panels" class="btn btn-secondary btn-sm mt-3">{{T .Lang "bot_settings.assign_agent_panel_first"}}</a>
+  <a href="/master/agents/{{.Bot.AgentID}}?tab=panels" class="btn btn-secondary btn-sm mt-3">{{T .Lang "bot_settings.assign_agent_panel_first"}}</a>
 </div>
 {{else}}
 <form method="post" action="/master/bots/{{.Bot.ID}}/bot-panels" class="card p-6 space-y-4 max-w-lg" id="bot-panel-assign-form">

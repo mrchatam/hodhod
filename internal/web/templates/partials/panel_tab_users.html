@@ -139,8 +139,8 @@
         {{end}}
         <label class="form-field">
           <span class="form-label">{{T .Lang "table.agent"}}</span>
-          <select name="agent_id" class="form-select">
-            <option value="">{{T .Lang "common.optional"}}</option>
+          <select name="agent_id" class="form-select" required>
+            <option value="">{{T .Lang "table.agent"}}</option>
             {{range .Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
           </select>
           <p class="form-hint">{{T .Lang "form_hint.attach_agent_on_create"}}</p>

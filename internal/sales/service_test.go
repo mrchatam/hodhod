@@ -32,11 +32,32 @@ func (m *mockPanel) UpdateUser(ctx context.Context, username string, req panels.
 	if req.AddBytes > 0 {
 		u.DataLimitBytes += req.AddBytes
 	}
+	if req.ExpireAt != nil {
+		u.ExpireAt = *req.ExpireAt
+	}
+	if req.Enabled != nil {
+		u.Enabled = *req.Enabled
+	}
 	return u, nil
 }
-func (m *mockPanel) ResetUsage(context.Context, string) error { return nil }
-func (m *mockPanel) Disable(context.Context, string) error    { return nil }
-func (m *mockPanel) Enable(context.Context, string) error     { return nil }
+func (m *mockPanel) ResetUsage(_ context.Context, username string) error {
+	if u := m.users[username]; u != nil {
+		u.UsedBytes = 0
+	}
+	return nil
+}
+func (m *mockPanel) Disable(_ context.Context, username string) error {
+	if u := m.users[username]; u != nil {
+		u.Enabled = false
+	}
+	return nil
+}
+func (m *mockPanel) Enable(_ context.Context, username string) error {
+	if u := m.users[username]; u != nil {
+		u.Enabled = true
+	}
+	return nil
+}
 func (m *mockPanel) DeleteUser(context.Context, string) error { return nil }
 func (m *mockPanel) SubscriptionURL(context.Context, string) (string, error) {
 	return "https://sub.example/x", nil

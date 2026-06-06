@@ -13,20 +13,6 @@ import (
 	"github.com/mrchatam/hodhod/internal/sales"
 )
 
-func (s *Server) redirectAgentServices(w http.ResponseWriter, r *http.Request) {
-	admin := r.Context().Value(ctxAdmin).(*db.Admin)
-	if admin.Role != db.RoleAgent {
-		http.NotFound(w, r)
-		return
-	}
-	target := strings.TrimPrefix(r.URL.Path, "/services")
-	if target == "" || target == "/" {
-		http.Redirect(w, r, "/customers", http.StatusMovedPermanently)
-		return
-	}
-	http.Redirect(w, r, "/customers"+target, http.StatusMovedPermanently)
-}
-
 func (s *Server) pageCustomers(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
 	if admin.Role == db.RoleMaster {
@@ -301,24 +287,22 @@ func (s *Server) postAgentPanelUserModify(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) postAgentPanelUserReset(w http.ResponseWriter, r *http.Request) {
-	s.postAgentPanelUserAction(w, r, db.PermResetUsage, func(client panels.Client, email string) error {
-		return client.ResetUsage(r.Context(), email)
-	})
+	s.postAgentPanelUserAction(w, r, db.PermResetUsage, s.Sales.ResetPanelUsage)
 }
 
 func (s *Server) postAgentPanelUserDisable(w http.ResponseWriter, r *http.Request) {
-	s.postAgentPanelUserAction(w, r, db.PermDisableEnable, func(client panels.Client, email string) error {
-		return client.Disable(r.Context(), email)
+	s.postAgentPanelUserAction(w, r, db.PermDisableEnable, func(ctx context.Context, panelID int64, email string) error {
+		return s.Sales.SetPanelAccountEnabled(ctx, panelID, email, false)
 	})
 }
 
 func (s *Server) postAgentPanelUserEnable(w http.ResponseWriter, r *http.Request) {
-	s.postAgentPanelUserAction(w, r, db.PermDisableEnable, func(client panels.Client, email string) error {
-		return client.Enable(r.Context(), email)
+	s.postAgentPanelUserAction(w, r, db.PermDisableEnable, func(ctx context.Context, panelID int64, email string) error {
+		return s.Sales.SetPanelAccountEnabled(ctx, panelID, email, true)
 	})
 }
 
-func (s *Server) postAgentPanelUserAction(w http.ResponseWriter, r *http.Request, perm db.Perm, fn func(panels.Client, string) error) {
+func (s *Server) postAgentPanelUserAction(w http.ResponseWriter, r *http.Request, perm db.Perm, fn func(context.Context, int64, string) error) {
 	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	email := s.panelUserEmail(r)
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
@@ -338,12 +322,7 @@ func (s *Server) postAgentPanelUserAction(w http.ResponseWriter, r *http.Request
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	client, err := s.Panels.Get(r.Context(), panelID)
-	if err != nil {
-		s.panelUserHTMLError(w, err.Error())
-		return
-	}
-	if err = fn(client, email); err != nil {
+	if err := fn(r.Context(), panelID, email); err != nil {
 		s.panelUserHTMLError(w, err.Error())
 		return
 	}

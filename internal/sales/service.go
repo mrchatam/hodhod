@@ -25,7 +25,7 @@ var (
 
 // Service performs permission-checked panel operations for sellers and bots.
 type Service struct {
-	Store  *db.Store
+	Store  salesStore
 	Panels *panels.Registry
 }
 
@@ -436,6 +436,49 @@ func (s *Service) ModifyPanelAccount(ctx context.Context, in ModifyPanelAccountI
 		return nil, nil
 	}
 	return s.applyUserInfo(ctx, svc, info)
+}
+
+// ResetPanelUsage resets panel client usage and syncs the linked db.Service when present.
+func (s *Service) ResetPanelUsage(ctx context.Context, panelID int64, username string) error {
+	client, err := s.Panels.Get(ctx, panelID)
+	if err != nil {
+		return err
+	}
+	if err := client.ResetUsage(ctx, username); err != nil {
+		return err
+	}
+	svc, err := s.Store.GetServiceByPanelUsername(ctx, panelID, username)
+	if err != nil {
+		return nil
+	}
+	svc.UsedBytes = 0
+	return s.Store.UpdateServiceByID(ctx, svc)
+}
+
+// SetPanelAccountEnabled enables or disables a panel client and syncs the linked db.Service when present.
+func (s *Service) SetPanelAccountEnabled(ctx context.Context, panelID int64, username string, enabled bool) error {
+	client, err := s.Panels.Get(ctx, panelID)
+	if err != nil {
+		return err
+	}
+	if enabled {
+		err = client.Enable(ctx, username)
+	} else {
+		err = client.Disable(ctx, username)
+	}
+	if err != nil {
+		return err
+	}
+	svc, err := s.Store.GetServiceByPanelUsername(ctx, panelID, username)
+	if err != nil {
+		return nil
+	}
+	info, err := client.GetUser(ctx, username)
+	if err != nil {
+		return err
+	}
+	_, err = s.applyUserInfo(ctx, svc, info)
+	return err
 }
 
 func buildModifyUpdateRequest(in ModifyInput) panels.UpdateUserRequest {
