@@ -213,11 +213,7 @@ func (s *Server) postBotSettings(w http.ResponseWriter, r *http.Request) {
 		keys := []string{"warn_percent", "currency", "topup_min_toman", "topup_max_toman",
 			"trial_enabled", "trial_duration_hours", "trial_volume_gb", "trial_max_per_user"}
 		botconfig.SaveSettingsKeys(s.Store, r.Context(), id, keys, formMap(r))
-		trialVal := "false"
-		if r.FormValue("trial_enabled") == "true" {
-			trialVal = "true"
-		}
-		_ = s.Store.SetSetting(r.Context(), "bot", id, "trial_enabled", trialVal)
+		_ = (&botconfig.Writer{Store: s.Store}).SetBool(r.Context(), id, "trial_enabled", r.FormValue("trial_enabled") == "true")
 		if mode := r.FormValue("card_display_mode"); mode != "" {
 			bot.CardDisplayMode = mode
 			_ = s.Store.UpdateBot(r.Context(), bot)
@@ -229,12 +225,9 @@ func (s *Server) postBotSettings(w http.ResponseWriter, r *http.Request) {
 		keys := []string{"approver_tg_id", "expiry_warn_days", "notify_receipt_pending", "notify_purchase", "notify_new_user", "notify_webhook_error"}
 		botconfig.SaveSettingsKeys(s.Store, r.Context(), id, keys, formMap(r))
 		_ = s.Store.ReplaceNotificationTargets(r.Context(), id, botconfig.ParseApproverField(r.FormValue("approver_tg_id")))
+		w := &botconfig.Writer{Store: s.Store}
 		for _, k := range []string{"notify_receipt_pending", "notify_purchase", "notify_new_user", "notify_webhook_error"} {
-			v := "false"
-			if r.FormValue(k) == "true" {
-				v = "true"
-			}
-			_ = s.Store.SetSetting(r.Context(), "bot", id, k, v)
+			_ = w.SetBool(r.Context(), id, k, r.FormValue(k) == "true")
 		}
 	case "menu":
 		for _, btn := range mustMenu(r, s, id) {
@@ -363,19 +356,10 @@ func (s *Server) postBotPanel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inboundIDs := inboundIDsFromForm(r.Form["inbound_ids"], r.FormValue("inbound_ids"), 0)
-	if len(inboundIDs) > 0 {
-		granted, _ := s.Store.ListAgentInboundCreateIDs(r.Context(), bot.AgentID, panelID)
-		grantSet := map[int]bool{}
-		for _, id := range granted {
-			grantSet[id] = true
-		}
-		for _, id := range inboundIDs {
-			if len(granted) > 0 && !grantSet[id] {
-				s.setFlash(w, "err", "Some inbounds are not granted to the agent for create")
-				http.Redirect(w, r, redirect, http.StatusSeeOther)
-				return
-			}
-		}
+	if err := botconfig.ValidatePanelScope(r.Context(), s.Store, bot.AgentID, panelID, inboundIDs); err != nil {
+		s.setFlash(w, "err", "Some inbounds are not granted to the agent for create")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
 	}
 	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(inboundIDs)}
 	err = s.Store.UpsertBotPanel(r.Context(), bp)

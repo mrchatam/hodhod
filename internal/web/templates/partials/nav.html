@@ -55,7 +55,7 @@
     <span class="font-bold text-brand-600">{{T .Lang "app.name"}}</span>
     <button type="button" class="btn btn-muted btn-sm" data-sheet-close aria-label="{{T .Lang "common.close"}}">{{T .Lang "common.close"}}</button>
   </div>
-  <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">{{template "nav_links_more" .}}</nav>
+  <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">{{template "nav_links" .}}</nav>
   <div class="p-4 border-t text-xs opacity-60" style="border-color:var(--color-border)">{{.Admin.Username}}</div>
 </aside>
 {{end}}
@@ -76,6 +76,7 @@
       <input type="hidden" name="theme" value="{{if eq .Theme "dark"}}light{{else if eq .Theme "light"}}dark{{else}}dark{{end}}">
       <button type="submit" class="btn btn-muted btn-sm" title="{{T .Lang "theme.dark"}}">{{if eq .Theme "dark"}}☀{{else}}☾{{end}}</button>
     </form>
+    <a href="/account/password" class="btn btn-muted btn-sm hidden md:inline">{{T .Lang "account.password"}}</a>
     <form method="post" action="/logout" class="inline hidden md:inline">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
       <button type="submit" class="btn btn-link btn-link-danger btn-sm">{{T .Lang "nav.logout"}}</button>

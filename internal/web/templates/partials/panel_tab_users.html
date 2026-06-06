@@ -97,7 +97,7 @@
         </thead>
         <tbody>
         {{range .Rows}}
-        {{template "panel_user_row_tr" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Agents" $.Agents "IsMaster" $.IsMaster "InboundTagMap" $.InboundTagMap)}}
+        {{template "user_row_tr" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Agents" $.Agents "IsMaster" $.IsMaster "InboundTagMap" $.InboundTagMap "Scope" "master-panel" "ShowOnline" true "ShowSource" true "ShowInbound" true)}}
         {{else}}
         <tr><td colspan="7" class="text-center py-10 opacity-60">{{T .Lang "panel_users.empty"}}</td></tr>
         {{end}}
@@ -108,7 +108,7 @@
 
   <div class="space-y-3 md:hidden">
     {{range .Rows}}
-    {{template "panel_user_card" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Agents" $.Agents "IsMaster" $.IsMaster "InboundTagMap" $.InboundTagMap)}}
+    {{template "user_row_card" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Agents" $.Agents "IsMaster" $.IsMaster "InboundTagMap" $.InboundTagMap "Scope" "master-panel" "ShowOnline" true "ShowSource" true "ShowInbound" true)}}
     {{else}}
     <div class="card p-10 text-center opacity-60">{{T .Lang "panel_users.empty"}}</div>
     {{end}}
@@ -116,7 +116,7 @@
 
   {{template "pagination" .}}
 
-  <div id="master-create-modal" class="modal-backdrop hidden" data-close>
+  <div id="master-create-modal" class="modal-backdrop hidden" data-close data-create-modal>
     <div class="modal-panel max-w-lg w-full">
       <h3 class="font-semibold mb-4">{{T .Lang "users.create_modal"}}</h3>
       <form id="panel-user-create" method="post" action="/master/panels/{{.Panel.ID}}/users" hx-post="/master/panels/{{.Panel.ID}}/users" hx-target="#create-status" hx-swap="innerHTML" class="space-y-4">

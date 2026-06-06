@@ -8,13 +8,13 @@
 </div>
 
 <nav class="tabs mb-6" role="tablist">
-  <button type="button" class="tab tab-active" data-tab="settings" role="tab">{{T .Lang "agent_edit.settings"}}</button>
-  <button type="button" class="tab" data-tab="permissions" role="tab">{{T .Lang "agent_edit.permissions"}}</button>
-  <button type="button" class="tab" data-tab="panels" role="tab">{{T .Lang "agent_edit.panels"}}</button>
-  <button type="button" class="tab" data-tab="domain" role="tab">{{T .Lang "agent_edit.domain"}}</button>
+  <a href="/master/agents/{{.Agent.ID}}?tab=settings" class="tab {{if eq .ActiveTab "settings"}}tab-active{{end}}" role="tab">{{T .Lang "agent_edit.settings"}}</a>
+  <a href="/master/agents/{{.Agent.ID}}?tab=permissions" class="tab {{if eq .ActiveTab "permissions"}}tab-active{{end}}" role="tab">{{T .Lang "agent_edit.permissions"}}</a>
+  <a href="/master/agents/{{.Agent.ID}}?tab=panels" class="tab {{if eq .ActiveTab "panels"}}tab-active{{end}}" role="tab">{{T .Lang "agent_edit.panels"}}</a>
+  <a href="/master/agents/{{.Agent.ID}}?tab=domain" class="tab {{if eq .ActiveTab "domain"}}tab-active{{end}}" role="tab">{{T .Lang "agent_edit.domain"}}</a>
 </nav>
 
-<section id="tab-settings" class="tab-panel space-y-6">
+<section id="tab-settings" class="tab-panel space-y-6 {{if ne .ActiveTab "settings"}}hidden{{end}}">
   <div class="grid lg:grid-cols-2 gap-6">
     <form method="post" action="/master/agents/{{.Agent.ID}}" class="card p-6 space-y-4">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -67,7 +67,7 @@
   </div>
 </section>
 
-<section id="tab-permissions" class="tab-panel hidden">
+<section id="tab-permissions" class="tab-panel {{if ne .ActiveTab "permissions"}}hidden{{end}}">
   <form method="post" action="/master/agents/{{.Agent.ID}}/permissions" class="card p-6 space-y-2 text-sm max-w-lg">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <h3 class="font-semibold mb-2">{{T .Lang "agent_edit.permissions"}}</h3>
@@ -77,7 +77,7 @@
   </form>
 </section>
 
-<section id="tab-panels" class="tab-panel hidden space-y-4">
+<section id="tab-panels" class="tab-panel space-y-4 {{if ne .ActiveTab "panels"}}hidden{{end}}">
   <form method="post" action="/master/agents/{{.Agent.ID}}/panels" class="card p-6 space-y-4 max-w-2xl" id="agent-panel-assign-form">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <h3 class="font-semibold">{{T .Lang "agent_edit.assign_panel"}}</h3>
@@ -124,7 +124,7 @@
   </form>
   <ul class="space-y-2">{{range .AgentPanels}}<li class="card p-3 text-sm flex justify-between items-center">
     <span>{{T $.Lang "table.panel"}} {{.PanelID}} · {{T $.Lang "agent_edit.max_users"}} {{.MaxUsers}} · {{.ExpiryCapDays}}d</span>
-    <a href="/master/agents/{{$.Agent.ID}}?access_panel={{.PanelID}}#tab-panels" class="btn btn-secondary btn-sm">{{T $.Lang "access.manage_users"}}</a>
+    <a href="/master/agents/{{$.Agent.ID}}?tab=panels&access_panel={{.PanelID}}" class="btn btn-secondary btn-sm">{{T $.Lang "access.manage_users"}}</a>
   </li>{{end}}</ul>
 
   {{if .AccessPanelID}}
@@ -177,7 +177,7 @@
   {{end}}
 </section>
 
-<section id="tab-domain" class="tab-panel hidden">
+<section id="tab-domain" class="tab-panel {{if ne .ActiveTab "domain"}}hidden{{end}}">
   <div class="card p-6 max-w-lg space-y-3">
     <form method="post" action="/master/agents/{{.Agent.ID}}/domain" class="space-y-3">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -22,10 +21,10 @@ func (s *Server) redirectAgentServices(w http.ResponseWriter, r *http.Request) {
 	}
 	target := strings.TrimPrefix(r.URL.Path, "/services")
 	if target == "" || target == "/" {
-		http.Redirect(w, r, "/customers", http.StatusSeeOther)
+		http.Redirect(w, r, "/customers", http.StatusMovedPermanently)
 		return
 	}
-	http.Redirect(w, r, "/customers"+target, http.StatusSeeOther)
+	http.Redirect(w, r, "/customers"+target, http.StatusMovedPermanently)
 }
 
 func (s *Server) pageCustomers(w http.ResponseWriter, r *http.Request) {
@@ -44,52 +43,11 @@ func (s *Server) pageCustomers(w http.ResponseWriter, r *http.Request) {
 	panelID, _ := strconv.ParseInt(r.URL.Query().Get("panel_id"), 10, 64)
 	pag := paginationFromRequest(r, 0, "q", "status", "panel_id")
 
-	visible, err := s.buildAgentVisibleUsers(r.Context(), agentID, panelID)
-	if err != nil {
-		http.Error(w, "error", http.StatusInternalServerError)
-		return
-	}
-
-	perms, _ := s.permsFor(r, admin)
-	var rows []PanelUserRow
-	agents := s.agentNameMap(r.Context())
-
-	panelIDs := []int64{}
-	if panelID > 0 {
-		panelIDs = []int64{panelID}
-	} else {
-		panels, _ := s.Store.ListPanelsForAgent(r.Context(), agentID)
-		for _, p := range panels {
-			panelIDs = append(panelIDs, p.ID)
-		}
-	}
-	enrichByPanel, listErrs := s.loadAgentCustomerEnrich(r.Context(), agentID, panelIDs)
-
-	for _, v := range visible {
-		if !agentCanViewUser(v) {
-			continue
-		}
-		enrich := enrichByPanel[v.PanelID]
-		row := s.agentCustomerRow(v, agents, perms, enrich)
-		if q != "" && !strings.Contains(strings.ToLower(row.Username), strings.ToLower(q)) &&
-			!strings.Contains(strings.ToLower(row.Label), strings.ToLower(q)) {
-			continue
-		}
-		if status != "" && row.Status != status {
-			continue
-		}
-		rows = append(rows, row)
-	}
-	pag.Total = len(rows)
-	start := pag.Offset()
-	end := start + pag.PerPage
-	if start > len(rows) {
-		start = len(rows)
-	}
-	if end > len(rows) {
-		end = len(rows)
-	}
-	pageRows := rows[start:end]
+	result := s.ListPanelAccounts(r, nil, ListPanelAccountsQuery{
+		AgentID: agentID, PanelID: panelID,
+		Filters: panelUserFilters{Query: q, Status: status},
+		Pagination: pag,
+	})
 
 	canCreate, _ := s.Store.AgentHasAnyCreateInbound(r.Context(), agentID)
 	if !canCreate {
@@ -103,18 +61,10 @@ func (s *Server) pageCustomers(w http.ResponseWriter, r *http.Request) {
 	}
 	assignedPanels, _ := s.Store.ListPanelsForAgent(r.Context(), agentID)
 
-	var panelListErr error
-	for _, err := range listErrs {
-		if err != nil {
-			panelListErr = err
-			break
-		}
-	}
-
 	s.renderPage(w, "agent_customers", r, map[string]any{
-		"Rows": pageRows, "Query": q, "StatusFilter": status, "PanelID": panelID,
-		"Pagination": pag, "CanCreate": canCreate && s.canPerm(r, admin, db.PermCreateUser),
-		"Panels": assignedPanels, "PanelListErr": panelListErr,
+		"Rows": result.Rows, "Query": q, "StatusFilter": status, "PanelID": panelID,
+		"Pagination": result.Pagination, "CanCreate": canCreate && s.canPerm(r, admin, db.PermCreateUser),
+		"Panels": assignedPanels, "PanelListErr": result.PanelErr,
 	})
 }
 
@@ -182,8 +132,18 @@ func (s *Server) agentCustomerRow(v agentVisibleUser, agents map[int64]string, p
 			row.PanelID = v.PanelID
 		}
 	}
-	row.CanModify = agentCanModifyUser(v, perms.Has(db.PermModifyUser))
+	row.CanModify = agentCanModifyUser(v, s.agentHasModifyPerm(perms))
 	return row
+}
+
+func (s *Server) agentHasModifyPerm(perms *db.AgentPermissions) bool {
+	if perms == nil {
+		return false
+	}
+	if perms.ViewOnly {
+		return false
+	}
+	return perms.Has(db.PermModifyUser)
 }
 
 func (s *Server) pageCustomerCreate(w http.ResponseWriter, r *http.Request) {
@@ -228,45 +188,18 @@ func (s *Server) pageAgentPanelCustomers(w http.ResponseWriter, r *http.Request)
 	f := s.panelUserFiltersFromRequest(r)
 	pag := paginationFromRequest(r, 0, "q", "status")
 	perms, _ := s.permsFor(r, admin)
-	agents := s.agentNameMap(r.Context())
 
-	visible, err := s.buildAgentVisibleUsers(r.Context(), agentID, panelID)
-	if err != nil {
-		http.Error(w, "error", http.StatusInternalServerError)
-		return
-	}
-	enrichByPanel, listErrs := s.loadAgentCustomerEnrich(r.Context(), agentID, []int64{panelID})
-	var panelListErr error
-	if err := listErrs[panelID]; err != nil {
-		panelListErr = err
-	}
-	var rows []PanelUserRow
-	for _, v := range visible {
-		if !agentCanViewUser(v) {
-			continue
-		}
-		row := s.agentCustomerRow(v, agents, perms, enrichByPanel[panelID])
-		if matchPanelUserFilters(row, panelUserFilters{Query: f.Query, Status: f.Status}) {
-			rows = append(rows, row)
-		}
-	}
-	pag.Total = len(rows)
-	start := pag.Offset()
-	end := start + pag.PerPage
-	if start > len(rows) {
-		start = len(rows)
-	}
-	if end > len(rows) {
-		end = len(rows)
-	}
+	result := s.ListPanelAccounts(r, panel, ListPanelAccountsQuery{
+		AgentID: agentID, PanelID: panelID, Filters: f, Pagination: pag,
+	})
 	canCreate, _ := s.agentPanelCanCreate(r.Context(), agentID, panelID)
 	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
 
 	s.renderPage(w, "agent_panel_customers", r, map[string]any{
-		"Panel": panel, "Rows": rows[start:end], "Filters": f, "Pagination": pag,
+		"Panel": panel, "Rows": result.Rows, "Filters": f, "Pagination": result.Pagination,
 		"CanCreate": canCreate && s.canPerm(r, admin, db.PermCreateUser),
 		"Perms": perms, "ShowCreateModal": r.URL.Query().Get("create") == "1",
-		"Templates": templates, "PanelListErr": panelListErr,
+		"Templates": templates, "PanelListErr": result.PanelErr,
 	})
 }
 
@@ -310,9 +243,12 @@ func (s *Server) postAgentPanelUser(w http.ResponseWriter, r *http.Request) {
 		}
 		inboundIDs = tpl.InboundIDs
 	}
-	svc, err := s.Sales.CreateManualService(r.Context(), sales.CreateManualInput{
-		AgentID: agentID, PanelID: panelID, Label: label, Contact: r.FormValue("contact"),
-		VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: false, InboundIDs: inboundIDs,
+	svc, err := s.Sales.CreatePanelAccount(r.Context(), sales.CreatePanelAccountInput{
+		CreateManualInput: sales.CreateManualInput{
+			AgentID: agentID, PanelID: panelID, Label: label, Contact: r.FormValue("contact"),
+			VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: false, InboundIDs: inboundIDs,
+		},
+		Note: note,
 	})
 	if err != nil {
 		s.setFlash(w, "err", friendlySalesErr(lang, err))
@@ -325,22 +261,43 @@ func (s *Server) postAgentPanelUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) postAgentPanelUserModify(w http.ResponseWriter, r *http.Request) {
-	s.postAgentPanelUserAction(w, r, db.PermModifyUser, func(client panels.Client, email string) error {
-		_ = r.ParseForm()
-		req := panels.UpdateUserRequest{}
-		if v := r.FormValue("volume_gb"); v != "" {
-			gb, _ := strconv.Atoi(v)
-			bytes := int64(gb) * 1024 * 1024 * 1024
-			req.DataLimitBytes = &bytes
-		}
-		if v := r.FormValue("duration_days"); v != "" {
-			d, _ := strconv.Atoi(v)
-			t := time.Now().Add(time.Duration(d) * 24 * time.Hour)
-			req.ExpireAt = &t
-		}
-		_, err := client.UpdateUser(r.Context(), email, req)
-		return err
+	panelID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	email := s.panelUserEmail(r)
+	admin := r.Context().Value(ctxAdmin).(*db.Admin)
+	if admin.AgentID == nil || !s.canPerm(r, admin, db.PermModifyUser) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	agentID := *admin.AgentID
+	visible, _ := s.buildAgentVisibleUsers(r.Context(), agentID, panelID)
+	v, ok := visible[agentUserKeyStr(panelID, email)]
+	if !ok || !agentCanViewUser(v) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	perms, _ := s.permsFor(r, admin)
+	if !agentCanModifyUser(v, s.agentHasModifyPerm(perms)) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	_ = r.ParseForm()
+	in := modifyInputFromForm(r)
+	_, err := s.Sales.ModifyPanelAccount(r.Context(), sales.ModifyPanelAccountInput{
+		ModifyInput: in,
+		PanelID:     panelID,
+		Username:    email,
+		AgentID:     agentID,
 	})
+	if err != nil {
+		s.panelUserHTMLError(w, err.Error())
+		return
+	}
+	if r.Header.Get("HX-Request") != "" {
+		s.renderPanelUserRow(w, r, panelID, email)
+		return
+	}
+	s.setFlash(w, "ok", "Done")
+	http.Redirect(w, r, fmt.Sprintf("/agent/panels/%d/customers", panelID), http.StatusSeeOther)
 }
 
 func (s *Server) postAgentPanelUserReset(w http.ResponseWriter, r *http.Request) {
@@ -377,7 +334,7 @@ func (s *Server) postAgentPanelUserAction(w http.ResponseWriter, r *http.Request
 		return
 	}
 	perms, _ := s.permsFor(r, admin)
-	if !agentCanModifyUser(v, perms.Has(perm)) {
+	if !agentCanModifyUser(v, s.agentHasModifyPerm(perms)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

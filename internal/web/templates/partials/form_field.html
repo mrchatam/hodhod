@@ -30,25 +30,6 @@
 </div>
 {{end}}
 
-{{define "pagination"}}
-{{with .Pagination}}
-{{if gt .Total 0}}
-<nav class="pagination" aria-label="{{T $.Lang "pagination.page"}}">
-  <p class="text-sm">{{printf (T $.Lang "pagination.showing") .From .To .Total}}</p>
-  <div class="pagination-links">
-    {{if .HasPrev}}<a href="{{.PrevURL}}" class="btn btn-muted btn-sm">{{T $.Lang "pagination.prev"}}</a>{{end}}
-    {{range $n := .PageNumbers}}
-      {{if eq $n -1}}<span>…</span>
-      {{else if eq $n .Page}}<span class="active">{{$n}}</span>
-      {{else}}<a href="{{$.PageURL $n}}">{{$n}}</a>{{end}}
-    {{end}}
-    {{if .HasNext}}<a href="{{.NextURL}}" class="btn btn-muted btn-sm">{{T $.Lang "pagination.next"}}</a>{{end}}
-  </div>
-</nav>
-{{end}}
-{{end}}
-{{end}}
-
 {{define "modal"}}
 <div id="{{.ID}}" class="modal-backdrop hidden" data-close role="dialog" aria-modal="true" aria-labelledby="{{.ID}}-title">
   <div class="modal-panel">

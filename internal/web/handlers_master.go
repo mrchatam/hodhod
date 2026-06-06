@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/mrchatam/hodhod/internal/botconfig"
 	"github.com/mrchatam/hodhod/internal/db"
 	"github.com/mrchatam/hodhod/internal/panels"
 )
@@ -173,7 +174,17 @@ func (s *Server) pageAgentEdit(w http.ResponseWriter, r *http.Request) {
 		"InboundGrants": inboundGrantsByPanel, "UserGrants": userGrantsByPanel,
 		"AccessPanelID": accessPanelID, "AccessInboundRows": accessInboundRows,
 		"AccessUserRows": accessUserRows, "AccessListErr": accessListErr,
+		"ActiveTab": agentEditTab(r.URL.Query().Get("tab")),
 	})
+}
+
+func agentEditTab(tab string) string {
+	switch tab {
+	case "permissions", "panels", "domain":
+		return tab
+	default:
+		return "settings"
+	}
 }
 
 func (s *Server) postAgentAccess(w http.ResponseWriter, r *http.Request) {
@@ -526,19 +537,10 @@ func (s *Server) postPanelBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inboundIDs := inboundIDsFromForm(r.Form["inbound_ids"], r.FormValue("inbound_ids"), 0)
-	if len(inboundIDs) > 0 {
-		granted, _ := s.Store.ListAgentInboundCreateIDs(r.Context(), bot.AgentID, panelID)
-		grantSet := map[int]bool{}
-		for _, id := range granted {
-			grantSet[id] = true
-		}
-		for _, id := range inboundIDs {
-			if len(granted) > 0 && !grantSet[id] {
-				s.setFlash(w, "err", "Some inbounds are not granted to the agent")
-				http.Redirect(w, r, redirect, http.StatusSeeOther)
-				return
-			}
-		}
+	if err := botconfig.ValidatePanelScope(r.Context(), s.Store, bot.AgentID, panelID, inboundIDs); err != nil {
+		s.setFlash(w, "err", "Some inbounds are not granted to the agent")
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
 	}
 	bp := &db.BotPanel{BotID: botID, PanelID: panelID, ScopeJSON: scopeJSONFromInboundIDs(inboundIDs)}
 	s.saveFlash(w, s.Store.UpsertBotPanel(r.Context(), bp), "Bot linked to panel")

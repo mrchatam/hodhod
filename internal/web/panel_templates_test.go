@@ -48,8 +48,8 @@ func TestSaveUserCreateTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.SetSetting(context.Background(), "panel", 1, userCreateTemplatesKey, string(b))
-	raw, _ := mem.GetSetting(context.Background(), "panel", 1, userCreateTemplatesKey)
+	mem.SetSetting(context.Background(), "panel", 1, "user_create_templates", string(b))
+	raw, _ := mem.GetSetting(context.Background(), "panel", 1, "user_create_templates")
 	var out []UserCreateTemplate
 	if err := json.Unmarshal([]byte(raw), &out); err != nil || len(out) != 1 || out[0].Name != "Standard" {
 		t.Fatalf("roundtrip failed: %v out=%+v", err, out)

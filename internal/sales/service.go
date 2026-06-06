@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,6 +56,25 @@ type ModifyInput struct {
 	ExpireAt     *time.Time
 	Enabled      *bool
 	DurationDays *int // sets expiry from now when ExpireAt nil
+}
+
+// CreatePanelAccountInput unifies all web-side panel account creation.
+type CreatePanelAccountInput struct {
+	CreateManualInput
+	ManualUsername string // non-empty → use as panel username (master panel tab only)
+	SkipAgentQuota   bool   // master-only: bypass enforceQuota when true
+	SkipPermCheck    bool   // master-only: bypass checkPerm (panel tab emergency create)
+	Note             string
+	LimitIP          int
+}
+
+// ModifyPanelAccountInput is the unified modify DTO for panel clients.
+type ModifyPanelAccountInput struct {
+	ModifyInput
+	PanelID  int64
+	Username string
+	AgentID  int64
+	IsMaster bool
 }
 
 func (s *Service) checkPerm(ctx context.Context, agentID int64, isMaster bool, perm db.Perm) error {
@@ -132,21 +152,41 @@ func (s *Service) enforceQuota(ctx context.Context, agentID, panelID int64, ap *
 
 // CreateManualService creates a VPN account from the sales panel.
 func (s *Service) CreateManualService(ctx context.Context, in CreateManualInput) (*db.Service, error) {
-	if err := s.checkPerm(ctx, in.AgentID, in.IsMaster, db.PermCreateUser); err != nil {
-		return nil, err
+	return s.CreatePanelAccount(ctx, CreatePanelAccountInput{CreateManualInput: in})
+}
+
+// CreatePanelAccount creates a panel client and Hodhod Service row when AgentID > 0.
+func (s *Service) CreatePanelAccount(ctx context.Context, in CreatePanelAccountInput) (*db.Service, error) {
+	if !in.SkipPermCheck {
+		if err := s.checkPerm(ctx, in.AgentID, in.IsMaster, db.PermCreateUser); err != nil {
+			return nil, err
+		}
 	}
-	ok, err := s.Store.AgentHasPanel(ctx, in.AgentID, in.PanelID)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
+	if in.AgentID > 0 {
+		ok, err := s.Store.AgentHasPanel(ctx, in.AgentID, in.PanelID)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrPanelNotAssigned
+		}
+	} else if !in.IsMaster {
 		return nil, ErrPanelNotAssigned
 	}
-	scope, ap, err := s.loadCreateScope(ctx, in.AgentID, in.PanelID, in.IsMaster)
-	if err != nil {
-		return nil, err
+
+	var scope panels.Scope
+	var ap *db.AgentPanel
+	var err error
+	if in.AgentID > 0 {
+		scope, ap, err = s.loadCreateScope(ctx, in.AgentID, in.PanelID, in.IsMaster)
+		if err != nil {
+			return nil, err
+		}
+	} else if len(in.InboundIDs) > 0 {
+		scope = panels.Scope{InboundIDs: in.InboundIDs}
 	}
-	if !in.IsMaster {
+
+	if !in.IsMaster && in.AgentID > 0 {
 		if len(in.InboundIDs) > 0 {
 			granted := map[int]bool{}
 			for _, id := range scope.InboundIDs {
@@ -161,33 +201,54 @@ func (s *Service) CreateManualService(ctx context.Context, in CreateManualInput)
 			}
 			scope = panels.Scope{InboundIDs: picked}
 		}
+	} else if in.IsMaster && len(in.InboundIDs) > 0 {
+		scope = panels.Scope{InboundIDs: in.InboundIDs}
 	}
-	limitBytes := int64(in.VolumeGB) * 1024 * 1024 * 1024
-	if err := s.enforceQuota(ctx, in.AgentID, in.PanelID, ap, limitBytes, in.DurationDays); err != nil {
-		return nil, err
+
+	vol := in.VolumeGB
+	dur := in.DurationDays
+	if vol <= 0 {
+		vol = 30
 	}
+	if dur <= 0 {
+		dur = 30
+	}
+	limitBytes := int64(vol) * 1024 * 1024 * 1024
+	if !in.SkipAgentQuota && in.AgentID > 0 {
+		if ap == nil {
+			ap, _ = s.Store.GetAgentPanel(ctx, in.AgentID, in.PanelID)
+		}
+		if err := s.enforceQuota(ctx, in.AgentID, in.PanelID, ap, limitBytes, dur); err != nil {
+			return nil, err
+		}
+	}
+
+	panelUsername := strings.TrimSpace(in.ManualUsername)
+	if panelUsername == "" {
+		panelUsername = fmt.Sprintf("hodhod-%d-%s", in.AgentID, uuid.New().String()[:8])
+	}
+
 	var customerID *int64
 	if in.CustomerID != nil {
 		customerID = in.CustomerID
-	} else if in.Label != "" || in.Contact != "" {
-		c := &db.Customer{AgentID: in.AgentID, Label: in.Label, Contact: in.Contact}
-		if err := s.Store.CreateCustomer(ctx, c); err != nil {
-			return nil, err
-		}
-		customerID = &c.ID
 	}
+
 	client, err := s.Panels.Get(ctx, in.PanelID)
 	if err != nil {
 		return nil, err
 	}
-	panelUsername := fmt.Sprintf("hodhod-%d-%s", in.AgentID, uuid.New().String()[:8])
-	expire := time.Now().Add(time.Duration(in.DurationDays) * 24 * time.Hour)
+	expire := time.Now().Add(time.Duration(dur) * 24 * time.Hour)
+	note := in.Note
+	if note == "" {
+		note = in.Label
+	}
 	info, err := client.CreateUser(ctx, panels.CreateUserRequest{
 		Username:       panelUsername,
 		DataLimitBytes: limitBytes,
 		ExpireAt:       expire,
 		Scope:          scope,
-		Note:           in.Label,
+		Note:           note,
+		LimitIP:        in.LimitIP,
 	})
 	if err != nil {
 		return nil, err
@@ -196,12 +257,18 @@ func (s *Service) CreateManualService(ctx context.Context, in CreateManualInput)
 	if sub == "" {
 		sub, _ = client.SubscriptionURL(ctx, panelUsername)
 	}
+
+	if in.AgentID <= 0 {
+		return nil, nil
+	}
+
 	adminID := in.AdminID
 	svc := &db.Service{
 		AgentID:          in.AgentID,
 		CustomerID:       customerID,
 		Source:           db.ServiceSourcePanel,
 		Label:            in.Label,
+		Contact:          in.Contact,
 		CreatedByAdminID: &adminID,
 		PanelID:          in.PanelID,
 		PanelUsername:    panelUsername,
@@ -330,15 +397,51 @@ func (s *Service) ModifyService(ctx context.Context, agentID, serviceID int64, i
 	if err != nil {
 		return nil, err
 	}
-	req := panels.UpdateUserRequest{}
-	if in.VolumeGB != nil {
-		limit := int64(*in.VolumeGB) * 1024 * 1024 * 1024
-		if !isMaster {
-			ap, err := s.Store.GetAgentPanel(ctx, svc.AgentID, svc.PanelID)
-			if err == nil && ap.QuotaBytes > 0 && limit > ap.QuotaBytes {
+	return s.ModifyPanelAccount(ctx, ModifyPanelAccountInput{
+		ModifyInput: in,
+		PanelID:     svc.PanelID,
+		Username:    svc.PanelUsername,
+		AgentID:     agentID,
+		IsMaster:    isMaster,
+	})
+}
+
+// ModifyPanelAccount updates a panel client and syncs the linked db.Service when present.
+func (s *Service) ModifyPanelAccount(ctx context.Context, in ModifyPanelAccountInput) (*db.Service, error) {
+	if !in.IsMaster {
+		if err := s.checkPerm(ctx, in.AgentID, in.IsMaster, db.PermModifyUser); err != nil {
+			return nil, err
+		}
+	}
+	req := buildModifyUpdateRequest(in.ModifyInput)
+	if req.DataLimitBytes != nil && !in.IsMaster {
+		svc, err := s.Store.GetServiceByPanelUsername(ctx, in.PanelID, in.Username)
+		if err == nil {
+			ap, aerr := s.Store.GetAgentPanel(ctx, svc.AgentID, in.PanelID)
+			if aerr == nil && ap.QuotaBytes > 0 && *req.DataLimitBytes > ap.QuotaBytes {
 				return nil, ErrQuotaExceeded
 			}
 		}
+	}
+	client, err := s.Panels.Get(ctx, in.PanelID)
+	if err != nil {
+		return nil, err
+	}
+	info, err := client.UpdateUser(ctx, in.Username, req)
+	if err != nil {
+		return nil, err
+	}
+	svc, err := s.Store.GetServiceByPanelUsername(ctx, in.PanelID, in.Username)
+	if err != nil {
+		return nil, nil
+	}
+	return s.applyUserInfo(ctx, svc, info)
+}
+
+func buildModifyUpdateRequest(in ModifyInput) panels.UpdateUserRequest {
+	req := panels.UpdateUserRequest{}
+	if in.VolumeGB != nil {
+		limit := int64(*in.VolumeGB) * 1024 * 1024 * 1024
 		req.DataLimitBytes = &limit
 	}
 	if in.ExpireAt != nil {
@@ -350,15 +453,7 @@ func (s *Service) ModifyService(ctx context.Context, agentID, serviceID int64, i
 	if in.Enabled != nil {
 		req.Enabled = in.Enabled
 	}
-	client, err := s.Panels.Get(ctx, svc.PanelID)
-	if err != nil {
-		return nil, err
-	}
-	info, err := client.UpdateUser(ctx, svc.PanelUsername, req)
-	if err != nil {
-		return nil, err
-	}
-	return s.applyUserInfo(ctx, svc, info)
+	return req
 }
 
 func (s *Service) AddTime(ctx context.Context, agentID, serviceID int64, days int, isMaster bool) (*db.Service, error) {

@@ -6,25 +6,25 @@
 <form method="get" class="card p-4 mb-6 flex flex-wrap gap-3 items-end">
   <label class="form-field"><span class="form-label">{{T .Lang "table.bot"}}</span>
     <select name="bot_id" class="form-select">
-      <option value="">All</option>
+      <option value="">{{T .Lang "common.all"}}</option>
       {{range .Bots}}<option value="{{.ID}}" {{if eq $.Filter.BotID .ID}}selected{{end}}>@{{.Username}}</option>{{end}}
     </select>
     <p class="form-hint">{{T .Lang "form_hint.payments_bot"}}</p>
   </label>
   <label class="form-field"><span class="form-label">{{T .Lang "common.status"}}</span>
     <select name="status" class="form-select">
-      <option value="">All</option>
-      <option value="pending" {{if eq .Filter.Status "pending"}}selected{{end}}>pending</option>
-      <option value="approved" {{if eq .Filter.Status "approved"}}selected{{end}}>approved</option>
-      <option value="rejected" {{if eq .Filter.Status "rejected"}}selected{{end}}>rejected</option>
+      <option value="">{{T .Lang "common.all"}}</option>
+      <option value="pending" {{if eq .Filter.Status "pending"}}selected{{end}}>{{T .Lang "payments.status_pending"}}</option>
+      <option value="approved" {{if eq .Filter.Status "approved"}}selected{{end}}>{{T .Lang "payments.status_approved"}}</option>
+      <option value="rejected" {{if eq .Filter.Status "rejected"}}selected{{end}}>{{T .Lang "payments.status_rejected"}}</option>
     </select>
   </label>
-  <label class="form-field"><span class="form-label">From</span><input type="date" name="date_from" class="form-input" value="{{if .Filter.DateFrom}}{{.Filter.DateFrom.Format "2006-01-02"}}{{end}}"><p class="form-hint">{{T .Lang "form_hint.payments_dates"}}</p></label>
-  <label class="form-field"><span class="form-label">To</span><input type="date" name="date_to" class="form-input" value="{{if .Filter.DateTo}}{{.Filter.DateTo.Format "2006-01-02"}}{{end}}"></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "payments.date_from"}}</span><input type="date" name="date_from" class="form-input" value="{{if .Filter.DateFrom}}{{.Filter.DateFrom.Format "2006-01-02"}}{{end}}"><p class="form-hint">{{T .Lang "form_hint.payments_dates"}}</p></label>
+  <label class="form-field"><span class="form-label">{{T .Lang "payments.date_to"}}</span><input type="date" name="date_to" class="form-input" value="{{if .Filter.DateTo}}{{.Filter.DateTo.Format "2006-01-02"}}{{end}}"></label>
   <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.filter"}}</button>
 </form>
 
-<h3 class="text-lg font-semibold mb-3">{{T .Lang "payments.pending"}}</h3>
+<h3 class="text-lg font-semibold mb-3">{{if eq .Filter.Status "pending"}}{{T .Lang "payments.pending"}}{{else if eq .Filter.Status ""}}{{T .Lang "payments.results"}}{{else}}{{T .Lang "payments.title"}}{{end}}</h3>
 <div class="card desktop-table overflow-hidden mb-8">
   <div class="data-table-wrap">
     <table class="data-table">
@@ -32,8 +32,8 @@
         <tr>
           <th>{{T .Lang "table.id"}}</th>
           <th>{{T .Lang "table.bot"}}</th>
-          <th>TG ID</th>
-          <th>Type</th>
+          <th>{{T .Lang "payments.tg_id"}}</th>
+          <th>{{T .Lang "payments.type"}}</th>
           <th>{{T .Lang "payments.amount"}}</th>
           <th>{{T .Lang "payments.receipt"}}</th>
           <th class="text-end">{{T .Lang "common.actions"}}</th>

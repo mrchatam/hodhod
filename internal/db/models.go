@@ -197,7 +197,7 @@ type Bot struct {
 	TokenEnc         string         `gorm:"not null"`
 	WebhookSecret    string         `gorm:"not null"`
 	Status           string         `gorm:"not null;default:active"`
-	SettingsJSON     datatypes.JSON `gorm:"type:jsonb;default:'{}'"`
+	SettingsJSON     datatypes.JSON `gorm:"type:jsonb;default:'{}'"` // deprecated: do not write; use bot_* tables and KV via botconfig
 	CardDisplayMode  string         `gorm:"not null;default:random"`
 	CardRRIndex      int            `gorm:"not null;default:0"`
 	WebhookLastError string         `gorm:"not null;default:''"`
@@ -322,6 +322,7 @@ type Service struct {
 	OrderID           *int64
 	Source            ServiceSource `gorm:"not null;default:bot"`
 	Label             string        `gorm:"not null;default:''"`
+	Contact           string        `gorm:"not null;default:''"`
 	CreatedByAdminID  *int64
 	PanelID           int64  `gorm:"not null"`
 	PanelUsername     string `gorm:"not null"`

@@ -1,0 +1,167 @@
+{{define "panel_user_status_badge"}}
+<span class="badge {{if eq .Status "active"}}badge-active{{else if eq .Status "expired"}}badge-expired{{else}}badge-disabled{{end}}">{{if eq .Status "active"}}{{T $.Lang "status.active"}}{{else if eq .Status "expired"}}{{T $.Lang "status.expired"}}{{else if eq .Status "disabled"}}{{T $.Lang "status.disabled"}}{{else}}{{.Status}}{{end}}</span>
+{{end}}
+
+{{define "panel_user_source_badge"}}
+<span class="badge badge-active">{{if eq .Source "panel"}}{{T $.Lang "panel_users.source_panel"}}{{else if eq .Source "hodhod"}}{{T $.Lang "panel_users.source_hodhod"}}{{else if eq .Source "both"}}{{T $.Lang "panel_users.source_both"}}{{else}}{{.Source}}{{end}}</span>
+{{end}}
+
+{{define "user_row_actions"}}
+{{if eq .Scope "agent-panel"}}
+  {{if .Row.CanModify}}{{template "user_row_actions_agent" .}}{{end}}
+{{else if eq .Scope "master-panel"}}
+  {{template "user_row_actions_master" .}}
+{{end}}
+{{end}}
+
+{{define "user_row_actions_master"}}
+{{if not .Row.HodhodOnly}}
+<div class="action-menu" data-action-menu>
+  <button type="button" class="btn btn-muted btn-sm" data-action-menu-btn aria-label="{{T $.Lang "common.actions"}}">{{T $.Lang "common.more"}}</button>
+  <div class="action-menu-panel hidden" data-action-menu-panel>
+    <details class="px-3 py-2">
+      <summary class="cursor-pointer text-sm">{{T $.Lang "common.modify"}}</summary>
+      <form class="mt-2 space-y-1" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/modify" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+        <input name="volume_gb" type="number" placeholder="GB" class="form-input text-xs py-1">
+        <input name="expire_at" type="date" class="form-input text-xs py-1">
+        <button type="submit" class="btn btn-secondary btn-sm w-full" data-busy-text="{{T $.Lang "common.loading"}}"><span class="spinner"></span><span class="btn-label">{{T $.Lang "users.save_limits"}}</span></button>
+      </form>
+    </details>
+    <form hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/reset" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML" hx-confirm="{{T $.Lang "users.reset_usage_hint"}}"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "users.reset_usage"}}</button></form>
+    {{if .Row.Enabled}}
+    <form hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/disable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.disable"}}</button></form>
+    {{else}}
+    <form hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/enable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.enable"}}</button></form>
+    {{end}}
+    {{if $.IsMaster}}
+    <details class="px-3 py-2 border-t border-[var(--color-border)]">
+      <summary class="cursor-pointer text-sm">{{T $.Lang "access.attach_user"}}</summary>
+      <form class="mt-2 flex flex-wrap gap-2 items-end" hx-post="/master/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/attach-agent" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+        <select name="agent_id" class="form-select text-xs py-1 flex-1 min-w-[8rem]" required>
+          <option value="">{{T $.Lang "table.agent"}}</option>
+          {{range $.Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">{{T $.Lang "access.attach_user"}}</button>
+      </form>
+    </details>
+    {{end}}
+  </div>
+</div>
+{{else if .Row.ServiceID}}
+<a href="/services?q={{urlPath .Row.Username}}" class="btn btn-secondary btn-sm">{{T $.Lang "nav.services"}}</a>
+{{end}}
+{{end}}
+
+{{define "user_row_actions_agent"}}
+<div class="action-menu inline" data-action-menu>
+  <button type="button" class="btn btn-muted btn-sm" data-action-menu-btn>{{T $.Lang "common.more"}}</button>
+  <div class="action-menu-panel hidden" data-action-menu-panel>
+    <details class="px-3 py-2">
+      <summary class="cursor-pointer text-sm">{{T $.Lang "common.modify"}}</summary>
+      <form class="mt-2 space-y-1" hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/modify" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+        <input name="volume_gb" type="number" placeholder="GB" class="form-input text-xs py-1">
+        <input name="duration_days" type="number" placeholder="days" class="form-input text-xs py-1">
+        <button type="submit" class="btn btn-secondary btn-sm w-full">{{T $.Lang "users.save_limits"}}</button>
+      </form>
+    </details>
+    <form hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/reset" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML" hx-confirm="{{T $.Lang "users.reset_usage_hint"}}">
+      <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+      <button type="submit" class="w-full">{{T $.Lang "users.reset_usage"}}</button>
+    </form>
+    {{if .Row.Enabled}}
+    <form hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/disable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.disable"}}</button></form>
+    {{else}}
+    <form hx-post="/agent/panels/{{.Panel.ID}}/users/{{urlPath .Row.Username}}/enable" hx-target="#pu-row-{{.Row.Username}}" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="w-full">{{T $.Lang "common.enable"}}</button></form>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "user_row_tr"}}
+<tr id="pu-row-{{.Row.Username}}" class="{{if .Row.HodhodOnly}}bg-amber-50/40 dark:bg-amber-950/20{{end}}{{if eq .Scope "agent-panel"}} cursor-pointer{{end}}" {{if eq .Scope "agent-panel"}}data-row-toggle="drawer-{{.Row.Username}}"{{end}}>
+  <td>
+    <p class="font-mono text-xs">{{.Row.Username}}</p>
+    {{if and .ShowOnline .Row.Online}}<span class="badge badge-active text-[10px] mt-0.5">{{T $.Lang "panel_users.online"}}</span>{{end}}
+    {{if .Row.Label}}<p class="text-xs opacity-60 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
+    {{if .Row.HodhodOnly}}<p class="text-xs text-amber-700 mt-0.5">{{T $.Lang "panel_users.not_on_panel"}}</p>{{end}}
+  </td>
+  {{if .ShowInbound}}<td class="text-xs">{{inboundLabel .Row.InboundIDs .Row.InboundTags $.InboundTagMap}}</td>{{end}}
+  <td class="min-w-[8rem] whitespace-nowrap">
+    <div class="usage-bar"><div class="usage-bar-fill" style="width:{{usagePct .Row.UsedBytes .Row.DataLimitBytes}}%"></div></div>
+    <p class="text-xs opacity-60 mt-0.5">{{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</p>
+  </td>
+  <td class="whitespace-nowrap">{{time .Row.ExpireAt}}</td>
+  {{if .ShowSource}}<td>{{template "panel_user_source_badge" .Row}}</td>{{end}}
+  <td>{{template "panel_user_status_badge" .Row}}</td>
+  <td class="text-end" {{if eq .Scope "agent-panel"}}data-stop-toggle{{end}}>
+    {{if and (eq .Scope "agent-panel") .Row.SubLink}}<button type="button" class="btn btn-muted btn-sm" data-copy="{{.Row.SubLink}}">{{T $.Lang "users.copy_sub"}}</button>{{end}}
+    {{template "user_row_actions" .}}
+  </td>
+</tr>
+{{if eq .Scope "agent-panel"}}
+<tr id="drawer-{{.Row.Username}}" class="hidden">
+  <td colspan="5" class="bg-[var(--color-surface-2)] p-4">
+    <p class="text-sm font-semibold mb-2">{{T $.Lang "users.detail"}}</p>
+    <p class="text-xs opacity-60">{{T $.Lang "services.usage"}}: {{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</p>
+    <p class="text-xs opacity-60">{{T $.Lang "services.expires"}}: {{time .Row.ExpireAt}}</p>
+    {{if .Row.SubLink}}<p class="text-xs mt-2 break-all"><a href="{{.Row.SubLink}}" target="_blank" rel="noopener">{{.Row.SubLink}}</a></p>{{end}}
+  </td>
+</tr>
+{{end}}
+{{end}}
+
+{{define "user_row_card"}}
+<div id="pu-card-{{.Row.Username}}" class="mobile-card {{if .Row.HodhodOnly}}border-amber-300/50{{end}}">
+  <div class="flex items-start justify-between gap-2">
+    <div class="min-w-0">
+      <p class="font-mono text-xs">{{.Row.Username}}</p>
+      {{if and .ShowOnline .Row.Online}}<span class="badge badge-active text-[10px]">{{T $.Lang "panel_users.online"}}</span>{{end}}
+      {{if .Row.Label}}<p class="text-xs opacity-60 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
+      {{if .Row.HodhodOnly}}<p class="text-xs text-amber-700 mt-0.5">{{T $.Lang "panel_users.not_on_panel"}}</p>{{end}}
+    </div>
+    {{template "panel_user_status_badge" .Row}}
+  </div>
+  <div class="grid grid-cols-2 gap-2 text-sm">
+    {{if .ShowInbound}}<div><span class="text-xs opacity-60">{{T $.Lang "panel_users.inbound"}}</span><p class="text-xs mt-0.5">{{inboundLabel .Row.InboundIDs .Row.InboundTags $.InboundTagMap}}</p></div>{{end}}
+    {{if .ShowSource}}<div><span class="text-xs opacity-60">{{T $.Lang "panel_users.source"}}</span><p class="mt-0.5">{{template "panel_user_source_badge" .Row}}</p></div>{{end}}
+    <div class="col-span-2"><span class="text-xs opacity-60">{{T $.Lang "services.usage"}}</span>
+      <div class="usage-bar mt-1"><div class="usage-bar-fill" style="width:{{usagePct .Row.UsedBytes .Row.DataLimitBytes}}%"></div></div>
+      <p class="text-xs opacity-60 mt-0.5">{{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</p>
+    </div>
+    <div><span class="text-xs opacity-60">{{T $.Lang "services.expires"}}</span><p>{{time .Row.ExpireAt}}</p></div>
+  </div>
+  <div class="flex justify-end pt-1 gap-2">
+    {{if and (eq .Scope "agent-panel") .Row.SubLink}}<button type="button" class="btn btn-muted btn-sm" data-copy="{{.Row.SubLink}}">{{T $.Lang "users.copy_sub"}}</button>{{end}}
+    {{template "user_row_actions" .}}
+  </div>
+</div>
+{{end}}
+
+{{define "user_row"}}
+{{template "user_row_tr" .}}
+<div id="pu-card-{{.Row.Username}}" class="mobile-card md:hidden {{if .Row.HodhodOnly}}border-amber-300/50{{end}}" hx-swap-oob="true">
+  {{template "user_row_card_inner" .}}
+</div>
+{{end}}
+
+{{define "user_row_card_inner"}}
+  <div class="flex items-start justify-between gap-2">
+    <div class="min-w-0">
+      <p class="font-mono text-xs">{{.Row.Username}}</p>
+      {{if and .ShowOnline .Row.Online}}<span class="badge badge-active text-[10px]">{{T $.Lang "panel_users.online"}}</span>{{end}}
+      {{if .Row.Label}}<p class="text-xs opacity-60 mt-0.5">{{.Row.Label}}{{if .Row.AgentName}} · {{.Row.AgentName}}{{end}}</p>{{end}}
+    </div>
+    {{template "panel_user_status_badge" .Row}}
+  </div>
+  <div class="grid grid-cols-2 gap-2 text-sm">
+    <div class="col-span-2"><span class="text-xs opacity-60">{{T $.Lang "services.usage"}}</span>
+      <div class="usage-bar mt-1"><div class="usage-bar-fill" style="width:{{usagePct .Row.UsedBytes .Row.DataLimitBytes}}%"></div></div>
+      <p class="text-xs opacity-60 mt-0.5">{{gib .Row.UsedBytes}} / {{gib .Row.DataLimitBytes}}</p>
+    </div>
+    <div><span class="text-xs opacity-60">{{T $.Lang "services.expires"}}</span><p>{{time .Row.ExpireAt}}</p></div>
+  </div>
+  <div class="flex justify-end pt-1">{{template "user_row_actions" .}}</div>
+{{end}}

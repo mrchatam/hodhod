@@ -58,6 +58,28 @@ func NewServer(cfg *config.Config, store *db.Store, box *crypto.Box, reg *panels
 	}, nil
 }
 
+func (s *Server) registerBotRoutes(r chi.Router, prefix string, masterOnly bool) {
+	r.Get(prefix+"/bots", s.pageBots)
+	r.Post(prefix+"/bots", s.postBot)
+	r.Get(prefix+"/bots/{id}/settings", s.pageBotSettings)
+	r.Post(prefix+"/bots/{id}/settings", s.postBotSettings)
+	if masterOnly {
+		r.Post(prefix+"/bots/{id}/delete", s.postBotDelete)
+		r.Post(prefix+"/bots/{id}/bot-panels", s.postBotPanel)
+		r.Post(prefix+"/bots/{id}/bot-panels/{panel_id}/delete", s.postBotPanelDelete)
+	}
+	r.Post(prefix+"/bots/{id}/cards", s.postBotCard)
+	r.Post(prefix+"/bots/{id}/cards/{cid}/delete", s.postBotCardDelete)
+	r.Post(prefix+"/bots/{id}/cards/{cid}", s.postBotCardUpdate)
+	r.Post(prefix+"/bots/{id}/channels", s.postBotChannel)
+	r.Post(prefix+"/bots/{id}/channels/{cid}/delete", s.postBotChannelDelete)
+	r.Get(prefix+"/bots/{id}/users", s.pageBotUsers)
+	r.Get(prefix+"/bots/{id}/users/{uid}", s.pageBotUserDetail)
+	r.Post(prefix+"/bots/{id}/users/{uid}/block", s.postBotUserBlock)
+	r.Post(prefix+"/bots/{id}/users/{uid}/unblock", s.postBotUserUnblock)
+	r.Post(prefix+"/bots/{id}/users/{uid}/wallet/adjust", s.postBotUserWalletAdjust)
+}
+
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
@@ -77,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/", s.pageDashboard)
 		r.Get("/onboarding", s.pageOnboarding)
 
+		// Canonical URLs: master /services/* ; agent /customers/* (agents get 301 from /services).
 		r.Get("/services", s.pageServices)
 		r.Get("/services/new", s.pageServiceCreate)
 		r.Post("/services", s.postService)
@@ -90,6 +113,13 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/services/{id}/enable", s.postServiceEnable)
 		r.Post("/services/{id}/reset", s.postServiceReset)
 		r.Post("/services/{id}/delete", s.postServiceDelete)
+		r.Post("/customers/{id}/modify", s.postServiceModify)
+		r.Post("/customers/{id}/add-time", s.postServiceAddTime)
+		r.Post("/customers/{id}/add-volume", s.postServiceAddVolume)
+		r.Post("/customers/{id}/disable", s.postServiceDisable)
+		r.Post("/customers/{id}/enable", s.postServiceEnable)
+		r.Post("/customers/{id}/reset", s.postServiceReset)
+		r.Post("/customers/{id}/delete", s.postServiceDelete)
 
 		r.Get("/payments/pending", s.pagePendingPayments)
 		r.Get("/payments/{botID}/{id}/receipt", s.getPaymentReceipt)
@@ -133,23 +163,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/panels/{id}/backups/run", s.postPanelBackupRun)
 			r.Get("/panels/{id}/backups/{backupID}/download", s.getPanelBackupDownload)
 			r.Post("/panels/{id}/backups/settings", s.postPanelBackupSettings)
-			r.Get("/bots", s.pageBots)
-			r.Post("/bots", s.postBot)
-			r.Get("/bots/{id}/settings", s.pageBotSettings)
-			r.Post("/bots/{id}/settings", s.postBotSettings)
-			r.Post("/bots/{id}/delete", s.postBotDelete)
-			r.Post("/bots/{id}/bot-panels", s.postBotPanel)
-			r.Post("/bots/{id}/bot-panels/{panel_id}/delete", s.postBotPanelDelete)
-			r.Post("/bots/{id}/cards", s.postBotCard)
-			r.Post("/bots/{id}/cards/{cid}/delete", s.postBotCardDelete)
-			r.Post("/bots/{id}/cards/{cid}", s.postBotCardUpdate)
-			r.Post("/bots/{id}/channels", s.postBotChannel)
-			r.Post("/bots/{id}/channels/{cid}/delete", s.postBotChannelDelete)
-			r.Get("/bots/{id}/users", s.pageBotUsers)
-			r.Get("/bots/{id}/users/{uid}", s.pageBotUserDetail)
-			r.Post("/bots/{id}/users/{uid}/block", s.postBotUserBlock)
-			r.Post("/bots/{id}/users/{uid}/unblock", s.postBotUserUnblock)
-			r.Post("/bots/{id}/users/{uid}/wallet/adjust", s.postBotUserWalletAdjust)
+			s.registerBotRoutes(r, "/master", true)
 		})
 
 		r.Route("/agent", func(r chi.Router) {
@@ -158,20 +172,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/plans", s.postAgentPlan)
 			r.Post("/plans/{id}", s.postAgentPlanUpdate)
 			r.Post("/plans/{id}/disable", s.postAgentPlanDisable)
-			r.Get("/bots", s.pageBots)
-			r.Post("/bots", s.postBot)
-			r.Get("/bots/{id}/settings", s.pageBotSettings)
-			r.Post("/bots/{id}/settings", s.postBotSettings)
-			r.Post("/bots/{id}/cards", s.postBotCard)
-			r.Post("/bots/{id}/cards/{cid}/delete", s.postBotCardDelete)
-			r.Post("/bots/{id}/cards/{cid}", s.postBotCardUpdate)
-			r.Post("/bots/{id}/channels", s.postBotChannel)
-			r.Post("/bots/{id}/channels/{cid}/delete", s.postBotChannelDelete)
-			r.Get("/bots/{id}/users", s.pageBotUsers)
-			r.Get("/bots/{id}/users/{uid}", s.pageBotUserDetail)
-			r.Post("/bots/{id}/users/{uid}/block", s.postBotUserBlock)
-			r.Post("/bots/{id}/users/{uid}/unblock", s.postBotUserUnblock)
-			r.Post("/bots/{id}/users/{uid}/wallet/adjust", s.postBotUserWalletAdjust)
+			s.registerBotRoutes(r, "/agent", false)
 			r.Get("/panels", s.pageAgentPanels)
 			r.Get("/panels/{id}/customers", s.pageAgentPanelCustomers)
 			r.Post("/panels/{id}/users", s.postAgentPanelUser)

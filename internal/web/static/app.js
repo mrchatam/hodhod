@@ -236,7 +236,7 @@
         cb.checked = ids.indexOf(cb.value) !== -1;
       }
     });
-    var modal = $('#master-create-modal');
+    var modal = document.querySelector('[data-create-modal]');
     if (modal) modal.classList.remove('hidden');
   }
 

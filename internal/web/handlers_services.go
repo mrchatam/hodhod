@@ -16,7 +16,11 @@ import (
 func (s *Server) pageServices(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
 	if admin.Role == db.RoleAgent {
-		s.pageCustomers(w, r)
+		target := "/customers"
+		if q := r.URL.RawQuery; q != "" {
+			target += "?" + q
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -53,7 +57,7 @@ func (s *Server) pageServices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) pageServiceCreate(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
 	if admin.Role == db.RoleAgent {
-		s.pageCustomerCreate(w, r)
+		http.Redirect(w, r, "/customers/new", http.StatusMovedPermanently)
 		return
 	}
 	if !s.canPerm(r, admin, db.PermCreateUser) && admin.Role != db.RoleMaster {
@@ -99,9 +103,11 @@ func (s *Server) postService(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	svc, err := s.Sales.CreateManualService(r.Context(), sales.CreateManualInput{
-		AgentID: agentID, PanelID: panelID, Label: r.FormValue("label"), Contact: r.FormValue("contact"),
-		VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: isMaster,
+	svc, err := s.Sales.CreatePanelAccount(r.Context(), sales.CreatePanelAccountInput{
+		CreateManualInput: sales.CreateManualInput{
+			AgentID: agentID, PanelID: panelID, Label: r.FormValue("label"), Contact: r.FormValue("contact"),
+			VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: isMaster,
+		},
 	})
 	if err != nil {
 		s.setFlash(w, "err", friendlySalesErr(lang, err))
@@ -158,7 +164,11 @@ func (s *Server) serviceAction(w http.ResponseWriter, r *http.Request, auditActi
 		s.renderServiceRow(w, r, id)
 		return
 	}
-	http.Redirect(w, r, "/services", http.StatusSeeOther)
+	redirect := "/services"
+	if admin.Role == db.RoleAgent {
+		redirect = "/customers"
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 func (s *Server) renderServiceRow(w http.ResponseWriter, r *http.Request, serviceID int64) {
@@ -192,8 +202,7 @@ func (s *Server) renderServiceRow(w http.ResponseWriter, r *http.Request, servic
 	}
 }
 
-func (s *Server) postServiceModify(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
+func modifyInputFromForm(r *http.Request) sales.ModifyInput {
 	in := sales.ModifyInput{}
 	if v := r.FormValue("volume_gb"); v != "" {
 		gb, _ := strconv.Atoi(v)
@@ -208,6 +217,12 @@ func (s *Server) postServiceModify(w http.ResponseWriter, r *http.Request) {
 			in.ExpireAt = &t
 		}
 	}
+	return in
+}
+
+func (s *Server) postServiceModify(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	in := modifyInputFromForm(r)
 	s.serviceAction(w, r, "modify_service", func(agentID, sid int64, isMaster bool) error {
 		_, err := s.Sales.ModifyService(r.Context(), agentID, sid, in, isMaster)
 		return err

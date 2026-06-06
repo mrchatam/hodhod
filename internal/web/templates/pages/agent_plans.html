@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
   <h2 class="text-2xl font-bold">{{T .Lang "agent_plans.title"}}</h2>
-  <a href="/agent/plans" class="btn btn-primary btn-sm md:hidden">{{T .Lang "agent_plans.add"}}</a>
+  <a href="/agent/plans" class="btn btn-primary btn-sm md:hidden" data-modal-open="plan-create-modal">{{T .Lang "agent_plans.add"}}</a>
 </div>
 
 <div class="grid lg:grid-cols-2 gap-6">
@@ -67,6 +67,7 @@
           <input name="price_toman" type="number" value="{{.PriceToman}}" class="form-input text-xs">
           <button type="submit" class="btn btn-secondary btn-sm">{{T $.Lang "common.save"}}</button>
         </form>
+        {{if eq .Status "active"}}<form method="post" action="/agent/plans/{{.ID}}/disable" class="mt-1"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="bot_id" value="{{.BotID}}"><button type="submit" class="btn btn-danger btn-sm w-full">{{T $.Lang "common.disable"}}</button></form>{{end}}
       </details>
     </div>
     {{else}}
@@ -101,5 +102,24 @@
     </label>
     <button type="submit" class="btn btn-primary">{{T .Lang "agent_plans.add"}}</button>
   </form>
+</div>
+
+<div id="plan-create-modal" class="modal-backdrop hidden" data-close>
+  <div class="modal-panel max-w-lg w-full">
+    <h3 class="font-semibold mb-4">{{T .Lang "agent_plans.add"}}</h3>
+    <form method="post" action="/agent/plans" class="space-y-4">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <label class="form-field"><select name="bot_id" class="form-select">{{range .Bots}}<option value="{{.ID}}">@{{.Username}}</option>{{end}}</select></label>
+      <label class="form-field"><select name="panel_id" class="form-select">{{range .PanelOptions}}<option value="{{.PanelID}}">{{.PanelName}}</option>{{end}}</select></label>
+      <label class="form-field"><input name="name" placeholder="{{T .Lang "agent_plans.plan_name"}}" class="form-input" required></label>
+      <label class="form-field"><input name="volume_gb" type="number" placeholder="{{T .Lang "agent_plans.volume_ph"}}" class="form-input" required></label>
+      <label class="form-field"><input name="duration_days" type="number" placeholder="{{T .Lang "agent_plans.duration_ph"}}" class="form-input" required></label>
+      <label class="form-field"><input name="price_toman" type="number" placeholder="{{T .Lang "agent_plans.price_ph"}}" class="form-input" required></label>
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn btn-muted btn-sm" data-modal-close="plan-create-modal">{{T .Lang "common.cancel"}}</button>
+        <button type="submit" class="btn btn-primary btn-sm">{{T .Lang "common.create"}}</button>
+      </div>
+    </form>
+  </div>
 </div>
 {{end}}

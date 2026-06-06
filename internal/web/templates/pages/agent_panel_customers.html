@@ -45,7 +45,7 @@
       </thead>
       <tbody>
       {{range .Rows}}
-      {{template "agent_customer_row" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Perms" $.Perms "Lang" $.Lang)}}
+      {{template "user_row_tr" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Perms" $.Perms "Lang" $.Lang "Scope" "agent-panel" "ShowOnline" false "ShowSource" false "ShowInbound" false)}}
       {{else}}
       <tr><td colspan="5" class="text-center py-10 opacity-60">{{T .Lang "panel_users.empty"}}</td></tr>
       {{end}}
@@ -53,9 +53,16 @@
     </table>
   </div>
 </div>
+<div class="space-y-3 md:hidden">
+  {{range .Rows}}
+  {{template "user_row_card" (dict "Row" . "Panel" $.Panel "CSRF" $.CSRF "Lang" $.Lang "Scope" "agent-panel" "ShowOnline" false "ShowSource" false "ShowInbound" false)}}
+  {{else}}
+  <div class="card p-10 text-center opacity-60">{{T .Lang "panel_users.empty"}}</div>
+  {{end}}
+</div>
 {{template "pagination" .}}
 
-<div id="create-modal" class="modal-backdrop {{if not .ShowCreateModal}}hidden{{end}}">
+<div id="create-modal" class="modal-backdrop {{if not .ShowCreateModal}}hidden{{end}}" data-create-modal>
   <div class="modal-panel">
     <h3 class="font-semibold mb-4">{{T .Lang "users.create_modal"}}</h3>
     {{if .Templates}}
