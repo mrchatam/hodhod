@@ -614,6 +614,25 @@ wait_health() {
   return 1
 }
 
+# Bridge egress test — host curl can work while Docker FORWARD/UFW blocks containers.
+check_docker_egress() {
+  [[ "$DEPLOY_MODE" == "native" ]] && return 0
+  [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]] && return 0
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  ui_hint "Checking outbound HTTPS from a throwaway container..."
+  if docker run --rm curlimages/curl:8.5.0 -sS --max-time 12 -o /dev/null \
+    "https://api.telegram.org/bot123:fake/getMe" 2>/dev/null; then
+    ui_ok "Docker bridge egress OK."
+    return 0
+  fi
+  ui_warn "Docker bridge egress FAILED (host curl may still work)."
+  ui_hint "Fix UFW: DEFAULT_FORWARD_POLICY=ACCEPT in /etc/default/ufw, then: sudo ufw reload && sudo systemctl restart docker"
+  ui_hint "Do not use HODHOD_HOST_NETWORK unless bridge egress cannot be fixed."
+  return 1
+}
+
 compose_up_db() {
   export DB_PASSWORD HTTP_PORT HODHOD_DB_HOST_PORT
   local db_files=(-f docker-compose.yml)
@@ -683,6 +702,7 @@ compose_pull_and_recreate_app() {
   pull_hodhod_image || return 1
   ui_hint "Recreating app container with pulled image..."
   compose_app_files
+  export HTTP_PORT
   docker compose "${COMPOSE_APP_FILES[@]}" up -d --pull always --force-recreate --no-deps hodhod-app
 }
 
@@ -920,6 +940,7 @@ do_update() {
     compose_pull_and_recreate_app || { ui_err "Failed to pull ${HODHOD_IMAGE}"; return 1; }
   fi
   wait_health || true
+  check_docker_egress || true
   ui_ok "Update complete (database volume preserved)."
 }
 
