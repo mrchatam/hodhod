@@ -43,8 +43,8 @@ Non-interactive env vars:
   HODHOD_IMAGE          override prebuilt image
   HODHOD_USE_DOCKER_MIRROR  1 to enable Arvan docker.io mirror
   HODHOD_SKIP_DOCKER_MIRROR 1 to skip mirror prompt
-  HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default 0; use 1 if UI looks stale)
-  HODHOD_FORCE_PREBUILT 1 to pull GHCR image even on a git checkout (default: build from source)
+  HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default 0; build mode only)
+  HODHOD_BUILD_LOCAL    1 to build on server (default: pull prebuilt image from GHCR)
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -244,17 +244,6 @@ load_env() {
   fi
 }
 
-# Git checkouts should build locally; GHCR :latest may be stale if CI failed.
-prefer_build_mode_for_git_checkout() {
-  if [[ "${HODHOD_FORCE_PREBUILT:-0}" == "1" ]]; then
-    return 0
-  fi
-  if [[ -d "$ROOT/.git" && -f "$ROOT/Dockerfile" && "$DEPLOY_MODE" == "docker" ]]; then
-    ui_warn "Git checkout detected — building from source (set HODHOD_FORCE_PREBUILT=1 to use ${HODHOD_IMAGE:-$HODHOD_IMAGE_DEFAULT} instead)."
-    DEPLOY_MODE=build
-  fi
-}
-
 backup_env() {
   if [[ -f "$ENV_FILE" ]]; then
     cp "$ENV_FILE" "$ENV_BACKUP"
@@ -400,7 +389,7 @@ choose_deploy_mode() {
   ui_line
   echo "  ${UI_BOLD}How should Hodhod run?${UI_RESET}"
   echo "    ${UI_CYAN}1)${UI_RESET} Docker — pull prebuilt image ${UI_DIM}(fastest, recommended)${UI_RESET}"
-  echo "    ${UI_CYAN}2)${UI_RESET} Docker — build from source ${UI_DIM}(slow, for developers)${UI_RESET}"
+  echo "    ${UI_CYAN}2)${UI_RESET} Docker — build from source ${UI_DIM}(dev only; set HODHOD_BUILD_LOCAL=1 on Update)${UI_RESET}"
   echo "    ${UI_CYAN}3)${UI_RESET} Native binary on host + Postgres in Docker"
   echo "       ${UI_DIM}(no app container; still needs Docker for the database)${UI_RESET}"
   ui_line
@@ -653,9 +642,18 @@ compose_rebuild_app() {
 
 # Pull prebuilt image and replace the running app container (database volume untouched).
 compose_pull_and_recreate_app() {
+  ui_hint "Pulling prebuilt image ${HODHOD_IMAGE} (built by GitHub Actions)..."
   pull_hodhod_image || return 1
   ui_hint "Recreating app container with pulled image..."
   docker compose up -d --pull always --force-recreate --no-deps hodhod-app
+}
+
+# Update uses GHCR by default; local build only when DEPLOY_MODE=build and HODHOD_BUILD_LOCAL=1.
+ensure_pull_deploy_mode() {
+  if [[ "$DEPLOY_MODE" == "build" && "${HODHOD_BUILD_LOCAL:-0}" != "1" ]]; then
+    ui_hint "Using prebuilt image (set DEPLOY_MODE=build and HODHOD_BUILD_LOCAL=1 to compile on server)."
+    DEPLOY_MODE=docker
+  fi
 }
 
 compose_up_build_app() {
@@ -861,13 +859,13 @@ do_update() {
   local build_no_cache="${HODHOD_BUILD_NO_CACHE:-0}"
 
   if [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
-    ui_hint "Pulling latest code from git..."
+    ui_hint "Pulling install/compose updates from git (app comes from ${HODHOD_IMAGE:-$HODHOD_IMAGE_DEFAULT})..."
     if ! git -C "$ROOT" pull --ff-only 2>/dev/null; then
       ui_warn "git pull failed or not fast-forward — continuing with current tree."
     fi
   fi
 
-  prefer_build_mode_for_git_checkout
+  ensure_pull_deploy_mode
   if [[ "$DEPLOY_MODE" == "native" ]]; then
     compose_up_db
     install_native_binary 1
