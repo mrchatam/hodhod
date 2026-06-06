@@ -119,6 +119,23 @@ apply_all_docker_net_fixes() {
   apply_docker_forward_rules "$iface"
 }
 
+compose_network_gateway() {
+  local root="${1:-.}"
+  local net
+  net="$(hodhod_compose_network "$root")"
+  [[ -n "$net" ]] || return 1
+  docker network inspect "$net" -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null || true
+}
+
+# Prefer the compose bridge gateway (e.g. 172.18.0.1). host.docker.internal often
+# resolves to docker0 (172.17.0.1), which compose containers cannot reach.
 socks_proxy_url() {
-  echo "socks5h://host.docker.internal:${HODHOD_SOCKS_PORT}"
+  local root="${1:-.}"
+  local gw
+  gw="$(compose_network_gateway "$root" || true)"
+  if [[ -n "$gw" ]]; then
+    echo "socks5h://${gw}:${HODHOD_SOCKS_PORT}"
+  else
+    echo "socks5h://host.docker.internal:${HODHOD_SOCKS_PORT}"
+  fi
 }

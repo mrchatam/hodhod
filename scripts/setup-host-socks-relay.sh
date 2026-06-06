@@ -34,12 +34,18 @@ start_socks_container() {
     fi
     echo "   Restricted port ${HODHOD_SOCKS_PORT} to Docker subnets (172.16.0.0/12)"
   fi
+
+  if ss -tlnp 2>/dev/null | grep -q ":${HODHOD_SOCKS_PORT} "; then
+    echo "   Listening on 0.0.0.0:${HODHOD_SOCKS_PORT}"
+  else
+    echo "WARN — port ${HODHOD_SOCKS_PORT} not visible in ss; check: docker logs $HODHOD_SOCKS_CONTAINER"
+  fi
 }
 
 update_env_proxy() {
   local env_file="$ROOT/.env"
   local proxy
-  proxy="$(socks_proxy_url)"
+  proxy="$(socks_proxy_url "$ROOT")"
   [[ -f "$env_file" ]] || { echo "No .env at $env_file"; exit 1; }
   if grep -q '^OUTBOUND_SOCKS_PROXY=' "$env_file"; then
     sed -i "s|^OUTBOUND_SOCKS_PROXY=.*|OUTBOUND_SOCKS_PROXY=${proxy}|" "$env_file"
@@ -53,13 +59,24 @@ update_env_proxy() {
 }
 
 test_socks_from_compose() {
-  local net
+  local net gw proxy code
   net="$(hodhod_compose_network "$ROOT")"
-  [[ -n "$net" ]] || { echo "WARN — hodhod compose network not found"; return 1; }
-  local proxy
-  proxy="$(socks_proxy_url)"
-  docker run --rm --network "$net" curlimages/curl:8.5.0 -sS --max-time 15 -o /dev/null \
-    --proxy "$proxy" "https://api.telegram.org/bot123:fake/getMe" 2>/dev/null
+  [[ -n "$net" ]] || { echo "WARN — hodhod compose network not found (start stack first)"; return 1; }
+  gw="$(compose_network_gateway "$ROOT" || true)"
+  proxy="$(socks_proxy_url "$ROOT")"
+  echo "   Network: $net  gateway: ${gw:-unknown}  proxy: $proxy"
+
+  code="$(docker run --rm --network "$net" curlimages/curl:8.5.0 -sS --max-time 20 -o /dev/null -w '%{http_code}' \
+    --proxy "$proxy" "https://api.telegram.org/bot123:fake/getMe" 2>&1)" || true
+  if [[ "$code" == "401" || "$code" == "200" ]]; then
+    echo "   Telegram via SOCKS: HTTP $code"
+    return 0
+  fi
+
+  echo "   Telegram via SOCKS failed (expected HTTP 401, got: ${code:-timeout})"
+  docker run --rm --network "$net" curlimages/curl:8.5.0 -sS --max-time 20 \
+    --proxy "$proxy" "https://api.telegram.org/bot123:fake/getMe" 2>&1 | tail -5 || true
+  return 1
 }
 
 main() {
@@ -71,13 +88,18 @@ main() {
 
   if test_socks_from_compose; then
     echo "OK — compose network reaches Telegram via host SOCKS relay."
-    echo "Run: bash install.sh → Update  (or docker compose up -d --force-recreate hodhod-app)"
+    echo "Run: docker compose up -d --force-recreate hodhod-app"
     exit 0
   fi
 
+  echo ""
   echo "WARN — SOCKS relay started but curl test failed."
   echo "Check: docker logs $HODHOD_SOCKS_CONTAINER"
-  echo "Proxy URL: $(socks_proxy_url)"
+  echo "Proxy URL: $(socks_proxy_url "$ROOT")"
+  echo ""
+  echo "Manual test:"
+  echo "  docker run --rm --network $(hodhod_compose_network "$ROOT" || echo hodhod_default) curlimages/curl:8.5.0 \\"
+  echo "    --proxy $(socks_proxy_url "$ROOT") https://api.telegram.org/bot123:fake/getMe"
   exit 1
 }
 
