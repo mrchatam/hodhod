@@ -27,7 +27,14 @@ func TestFriendlyTokenError_network(t *testing.T) {
 
 func TestFriendlyTokenError_deadline(t *testing.T) {
 	err := FriendlyTokenError(errors.New(`Post "https://api.telegram.org/bot/getMe": context deadline exceeded`))
-	if !strings.Contains(err.Error(), "api.telegram.org") {
+	if !strings.Contains(err.Error(), "HODHOD_HOST_NETWORK") {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+func TestFriendlyTokenError_dialTimeout(t *testing.T) {
+	err := FriendlyTokenError(errors.New("dial tcp 149.154.166.110:443: i/o timeout"))
+	if !strings.Contains(err.Error(), "HODHOD_HOST_NETWORK") {
 		t.Fatalf("unexpected: %v", err)
 	}
 }

@@ -182,10 +182,13 @@ func FriendlyTokenError(err error) error {
 	switch {
 	case strings.Contains(msg, "not found"), strings.Contains(msg, "404"):
 		return fmt.Errorf("invalid or revoked bot token — copy a fresh token from @BotFather")
+	case strings.Contains(msg, "connection refused"):
+		return fmt.Errorf("cannot reach Telegram API — check server network and firewall")
+	case strings.Contains(msg, "i/o timeout"):
+		return fmt.Errorf("Docker container cannot reach api.telegram.org (TCP timeout) — if curl works on the host, set HODHOD_HOST_NETWORK=1 in .env and rerun Update, or use DEPLOY_MODE=native")
 	case strings.Contains(msg, "deadline exceeded"), strings.Contains(msg, "context deadline"):
-		return fmt.Errorf("cannot reach Telegram API (timed out) — verify the server can connect to api.telegram.org; if using Docker + VPN, check container outbound NAT")
-	case strings.Contains(msg, "timeout"), strings.Contains(msg, "connection refused"),
-		strings.Contains(msg, "no such host"), strings.Contains(msg, "network"):
+		return fmt.Errorf("cannot reach Telegram API (timed out) — if curl works on the host but not in Docker, set HODHOD_HOST_NETWORK=1 in .env and rerun Update")
+	case strings.Contains(msg, "timeout"), strings.Contains(msg, "no such host"), strings.Contains(msg, "network"):
 		return fmt.Errorf("cannot reach Telegram API — check server network and firewall")
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"):
 		return fmt.Errorf("invalid bot token — verify the token from @BotFather")

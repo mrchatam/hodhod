@@ -45,6 +45,7 @@ Non-interactive env vars:
   HODHOD_SKIP_DOCKER_MIRROR 1 to skip mirror prompt
   HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default 0; build mode only)
   HODHOD_BUILD_LOCAL    1 to build on server (default: pull prebuilt image from GHCR)
+  HODHOD_HOST_NETWORK   1 when host curl works but container egress to the internet fails
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -456,6 +457,7 @@ MASTER_USERNAME=${MASTER_USERNAME}
 MASTER_PASSWORD=${MASTER_PASSWORD}
 PANEL_POLL_WORKERS=4
 HODHOD_IMAGE=${HODHOD_IMAGE}
+HODHOD_HOST_NETWORK=${HODHOD_HOST_NETWORK:-0}
 EOF
   chmod 600 "$ENV_FILE"
 }
@@ -610,11 +612,13 @@ wait_health() {
 
 compose_up_db() {
   export DB_PASSWORD HTTP_PORT
+  local db_files=(-f docker-compose.yml)
   if [[ "$DEPLOY_MODE" == "native" ]]; then
-    docker compose -f docker-compose.yml -f docker-compose.native.yml up -d hodhod-db
-  else
-    docker compose up -d hodhod-db
+    db_files+=(-f docker-compose.native.yml)
+  elif [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]]; then
+    db_files+=(-f docker-compose.host-network.yml)
   fi
+  docker compose "${db_files[@]}" up -d hodhod-db
 }
 
 # Compose file args for hodhod-app (build overlay adds Dockerfile build context).
@@ -622,6 +626,9 @@ compose_app_files() {
   COMPOSE_APP_FILES=(-f docker-compose.yml)
   if [[ "$DEPLOY_MODE" == "build" ]]; then
     COMPOSE_APP_FILES+=(-f docker-compose.build.yml)
+  fi
+  if [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]]; then
+    COMPOSE_APP_FILES+=(-f docker-compose.host-network.yml)
   fi
 }
 
@@ -645,7 +652,8 @@ compose_pull_and_recreate_app() {
   ui_hint "Pulling prebuilt image ${HODHOD_IMAGE} (built by GitHub Actions)..."
   pull_hodhod_image || return 1
   ui_hint "Recreating app container with pulled image..."
-  docker compose up -d --pull always --force-recreate --no-deps hodhod-app
+  compose_app_files
+  docker compose "${COMPOSE_APP_FILES[@]}" up -d --pull always --force-recreate --no-deps hodhod-app
 }
 
 # Update uses GHCR by default; local build only when DEPLOY_MODE=build and HODHOD_BUILD_LOCAL=1.
@@ -668,7 +676,8 @@ start_docker_app() {
   fi
   ui_hint "Pulling prebuilt image: ${HODHOD_IMAGE}"
   if pull_hodhod_image; then
-    docker compose up -d --pull always --force-recreate --no-deps hodhod-app
+    compose_app_files
+    docker compose "${COMPOSE_APP_FILES[@]}" up -d --pull always --force-recreate --no-deps hodhod-app
     return
   fi
   handle_image_unavailable
@@ -855,7 +864,7 @@ do_install() {
 do_update() {
   check_prereqs || return 1
   load_env
-  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
+  export DB_PASSWORD HTTP_PORT HODHOD_IMAGE HODHOD_HOST_NETWORK
   local build_no_cache="${HODHOD_BUILD_NO_CACHE:-0}"
 
   if [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
