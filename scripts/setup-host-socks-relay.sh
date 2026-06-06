@@ -16,12 +16,14 @@ start_socks_container() {
   docker pull serjs/go-socks5-proxy:latest
   docker run -d --name "$HODHOD_SOCKS_CONTAINER" --network host --restart unless-stopped \
     -e PROXY_PORT="$HODHOD_SOCKS_PORT" \
-    -e PROXY_BINDING=0.0.0.0 \
+    -e PROXY_LISTEN_IP=0.0.0.0 \
+    -e REQUIRE_AUTH=false \
     serjs/go-socks5-proxy:latest
 
   sleep 2
   if ! docker ps --format '{{.Names}}' | grep -qx "$HODHOD_SOCKS_CONTAINER"; then
-    echo "FAIL — SOCKS container did not start. Check: docker logs $HODHOD_SOCKS_CONTAINER"
+    echo "FAIL — SOCKS container exited. Logs:"
+    docker logs "$HODHOD_SOCKS_CONTAINER" 2>&1 | tail -10 || true
     exit 1
   fi
 
@@ -35,10 +37,12 @@ start_socks_container() {
     echo "   Restricted port ${HODHOD_SOCKS_PORT} to Docker subnets (172.16.0.0/12)"
   fi
 
-  if ss -tlnp 2>/dev/null | grep -q ":${HODHOD_SOCKS_PORT} "; then
+  if ss -tlnp 2>/dev/null | grep -qE ":${HODHOD_SOCKS_PORT}[[:space:]]"; then
     echo "   Listening on 0.0.0.0:${HODHOD_SOCKS_PORT}"
   else
-    echo "WARN — port ${HODHOD_SOCKS_PORT} not visible in ss; check: docker logs $HODHOD_SOCKS_CONTAINER"
+    echo "FAIL — port ${HODHOD_SOCKS_PORT} not listening. Logs:"
+    docker logs "$HODHOD_SOCKS_CONTAINER" 2>&1 | tail -10 || true
+    exit 1
   fi
 }
 
