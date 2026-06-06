@@ -65,6 +65,11 @@ func Run() error {
 	if err != nil {
 		return err
 	}
+	if cfg.OutboundSocksProxy != "" {
+		slog.Info("outbound proxy enabled", "proxy", cfg.OutboundSocksProxy)
+	} else {
+		slog.Info("outbound proxy disabled", "note", "containers use direct egress")
+	}
 
 	panelReg := panels.NewRegistry(box, httpClient, store)
 	salesSvc := &sales.Service{Store: store, Panels: panelReg}

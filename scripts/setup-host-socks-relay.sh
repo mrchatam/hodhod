@@ -83,6 +83,22 @@ test_socks_from_compose() {
   return 1
 }
 
+recreate_hodhod_app() {
+  echo "→ Recreating hodhod-app (load OUTBOUND_SOCKS_PROXY from .env)..."
+  (cd "$ROOT" && docker compose up -d --force-recreate hodhod-app)
+  sleep 4
+  local cid proxy_in_container
+  cid="$(docker compose -f "$ROOT/docker-compose.yml" ps hodhod-app -q 2>/dev/null | head -1 || true)"
+  if [[ -n "$cid" ]]; then
+    proxy_in_container="$(docker inspect "$cid" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^OUTBOUND_SOCKS_PROXY=' || true)"
+    if [[ -n "$proxy_in_container" ]]; then
+      echo "   Container env: $proxy_in_container"
+    else
+      echo "   WARN — OUTBOUND_SOCKS_PROXY missing in container (recreate failed?)"
+    fi
+  fi
+}
+
 main() {
   need_root
   echo "=== Hodhod host SOCKS relay (Docker bridge → host egress) ==="
@@ -92,7 +108,10 @@ main() {
 
   if test_socks_from_compose; then
     echo "OK — compose network reaches Telegram via host SOCKS relay."
-    echo "Run: docker compose up -d --force-recreate hodhod-app"
+    recreate_hodhod_app
+    echo ""
+    echo "Check app logs for: outbound proxy enabled"
+    echo "  docker compose logs hodhod-app | tail -20"
     exit 0
   fi
 
