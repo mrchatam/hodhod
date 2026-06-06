@@ -633,27 +633,6 @@ wait_health() {
   return 1
 }
 
-# Bridge egress test on the Hodhod compose network (not default docker0).
-check_docker_egress() {
-  [[ "$DEPLOY_MODE" == "native" ]] && return 0
-  [[ "${HODHOD_HOST_NETWORK:-0}" == "1" ]] && return 0
-  if ! command -v docker >/dev/null 2>&1; then
-    return 0
-  fi
-  # shellcheck source=scripts/docker-net-common.sh
-  source "$ROOT/scripts/docker-net-common.sh"
-  local net
-  net="$(hodhod_compose_network "$ROOT")"
-  ui_hint "Checking outbound HTTPS from Hodhod compose network (${net:-unknown})..."
-  if docker_egress_test "$net"; then
-    ui_ok "Docker compose network egress OK."
-    return 0
-  fi
-  ui_warn "Docker compose network egress FAILED (host curl may still work)."
-  ui_hint "Fix: sudo bash scripts/fix-docker-egress.sh --apply"
-  return 1
-}
-
 compose_up_db() {
   export DB_PASSWORD HTTP_PORT HODHOD_DB_HOST_PORT
   local db_files=(-f docker-compose.yml)
@@ -962,7 +941,6 @@ do_update() {
     compose_pull_and_recreate_app || { ui_err "Failed to pull ${HODHOD_IMAGE}"; return 1; }
   fi
   wait_health || true
-  check_docker_egress || true
   ui_ok "Update complete (database volume preserved)."
 }
 
