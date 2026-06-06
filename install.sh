@@ -422,14 +422,15 @@ choose_menu() {
   echo "    ${UI_CYAN}5)${UI_RESET} Show status"
   echo "    ${UI_CYAN}6)${UI_RESET} Re-generate secrets"
   echo "    ${UI_CYAN}7)${UI_RESET} Configure / renew Nginx + SSL"
+  echo "    ${UI_CYAN}8)${UI_RESET} Fix Docker outbound networking (bot add / Telegram)"
   echo ""
   while true; do
     echo -n "  ${UI_BOLD}Choice${UI_RESET} ${UI_DIM}[1]${UI_RESET}: "
     safe_read choice || { ui_err "Could not read input. Try: bash install.sh --non-interactive"; return 1; }
     choice="${choice:-1}"
     case "$choice" in
-      1|2|3|4|5|6|7) MENU_CHOICE="$choice"; return 0 ;;
-      *) ui_err "Pick a number from 1 to 7." ;;
+      1|2|3|4|5|6|7|8) MENU_CHOICE="$choice"; return 0 ;;
+      *) ui_err "Pick a number from 1 to 8." ;;
     esac
   done
 }
@@ -628,13 +629,7 @@ check_docker_egress() {
     return 0
   fi
   ui_warn "Docker bridge egress FAILED (host curl may still work)."
-  if command -v ufw >/dev/null 2>&1; then
-    ui_hint "UFW: set DEFAULT_FORWARD_POLICY=ACCEPT in /etc/default/ufw, then: sudo ufw reload && sudo systemctl restart docker"
-  else
-    ui_hint "UFW not installed — likely missing Docker SNAT/MASQUERADE (VPN/nftables). Run: bash scripts/diagnose-docker-egress.sh"
-  fi
-  ui_hint "Quick fix for Hodhod: set DEPLOY_MODE=native in .env and rerun Update (app uses host network like curl)."
-  ui_hint "Or set HODHOD_HOST_NETWORK=1 + HODHOD_DB_HOST_PORT=15432 (see README)."
+  ui_hint "Fix: sudo bash scripts/fix-docker-egress.sh --apply"
   return 1
 }
 
@@ -1003,6 +998,26 @@ do_regen_secrets() {
   ui_ok "Secrets regenerated. Restart: bash install.sh (menu Update) or docker compose up -d --force-recreate hodhod-app"
 }
 
+do_fix_docker_egress() {
+  check_prereqs || return 1
+  load_env
+  export HODHOD_HOST_NETWORK=0
+  if grep -q '^HODHOD_HOST_NETWORK=1' "$ENV_FILE" 2>/dev/null; then
+    sed -i 's/^HODHOD_HOST_NETWORK=1/HODHOD_HOST_NETWORK=0/' "$ENV_FILE"
+    ui_hint "Set HODHOD_HOST_NETWORK=0 in .env (standard Docker bridge mode)."
+  fi
+  if maybe_sudo bash "$ROOT/scripts/fix-docker-egress.sh" --apply; then
+    ui_ok "Docker bridge egress fixed."
+    compose_app_files
+    export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
+    docker compose "${COMPOSE_APP_FILES[@]}" up -d --force-recreate --no-deps hodhod-app
+    wait_health || true
+  else
+    ui_err "Could not fix Docker egress automatically. Run: bash scripts/diagnose-docker-egress.sh"
+    return 1
+  fi
+}
+
 do_nginx_ssl() {
   check_prereqs || return 1
   [[ -f "$ENV_FILE" ]] || { ui_err "No .env — run Install first."; return 1; }
@@ -1042,4 +1057,5 @@ case "$choice" in
   5) do_status ;;
   6) do_regen_secrets ;;
   7) do_nginx_ssl ;;
+  8) do_fix_docker_egress ;;
 esac

@@ -170,35 +170,19 @@ Docker Compose maps `host.docker.internal` to the host gateway so a local SOCKS 
 
 ### Docker container cannot reach Telegram (host curl works)
 
-Bridge containers timing out while host `curl` works is **not a Hodhod bug** — Docker is not SNATing container traffic (missing MASQUERADE). UFW is often **not** involved (your server has no `ufw` command).
+**Hodhod did not change Docker networking** between early releases and now — `docker-compose.yml` has used the same bridge network since `72b6c54`. The bot-add regression was:
 
-Run diagnostics:
+1. **Code (`bdb1daa`):** `ValidateToken` used go-telegram's 5s init timeout → fixed in `919d63d` (direct getMe, 30s).
+2. **Your server:** `docker run curl …` also times out → **Docker SNAT/MASQUERADE** broken on the host (not Hodhod). Inbound (nginx → app) works; outbound (app → Telegram) does not.
+
+**Fix — keep standard Docker (`HODHOD_HOST_NETWORK=0`):**
 
 ```bash
-bash scripts/diagnose-docker-egress.sh
+sudo bash scripts/fix-docker-egress.sh --apply
+# or: bash install.sh → 8) Fix Docker outbound networking
+docker run --rm curlimages/curl:8.5.0 -sS --max-time 12 "https://api.telegram.org/bot123:fake/getMe"
+bash install.sh → Update
 ```
-
-Check `/etc/docker/daemon.json` for `"iptables": false` and restart Docker after any fix.
-
-**Recommended Hodhod fix — native mode** (app uses host network, same as working curl):
-
-```env
-DEPLOY_MODE=native
-HODHOD_HOST_NETWORK=0
-```
-
-Then `bash install.sh` → Update.
-
-**Alternative — host-network Docker app:**
-
-```env
-DEPLOY_MODE=docker
-HODHOD_HOST_NETWORK=1
-HODHOD_DB_HOST_PORT=15432
-HTTP_PORT=9000
-```
-
-Ensure `HTTP_PORT` matches Nginx. Then Update.
 
 ### Arvan CDN / reverse proxy
 
