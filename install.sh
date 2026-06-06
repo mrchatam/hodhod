@@ -43,7 +43,7 @@ Non-interactive env vars:
   HODHOD_IMAGE          override prebuilt image
   HODHOD_USE_DOCKER_MIRROR  1 to enable Arvan docker.io mirror
   HODHOD_SKIP_DOCKER_MIRROR 1 to skip mirror prompt
-  HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default on Update)
+  HODHOD_BUILD_NO_CACHE 1 to rebuild Docker image without cache (default 0; use 1 if UI looks stale)
   SETUP_NGINX           1 to configure nginx + certbot
   CERTBOT_EMAIL         required when SETUP_NGINX=1
 HELP
@@ -567,7 +567,7 @@ handle_image_unavailable() {
       1)
         ui_hint "Retrying pull..."
         if pull_hodhod_image; then
-          docker compose up -d hodhod-app
+          compose_pull_and_recreate_app
           return 0
         fi
         ui_err "Pull still failed."
@@ -582,8 +582,7 @@ handle_image_unavailable() {
         ui_warn "Building locally — requires network access to Debian/Alpine package mirrors."
         DEPLOY_MODE=build
         write_env
-        compose_build_app 0
-        compose_up_build_app
+        compose_rebuild_app 0
         return 0
         ;;
       *) ui_err "Pick 1, 2, or 3." ;;
@@ -617,32 +616,49 @@ compose_up_db() {
   fi
 }
 
-# Build hodhod-app from source. Pass 1 for --no-cache (Update default after compose down -v).
-compose_build_app() {
-  local no_cache="${1:-0}"
-  local build_args=(--pull)
-  if [[ "$no_cache" == "1" ]]; then
-    build_args+=(--no-cache)
+# Compose file args for hodhod-app (build overlay adds Dockerfile build context).
+compose_app_files() {
+  COMPOSE_APP_FILES=(-f docker-compose.yml)
+  if [[ "$DEPLOY_MODE" == "build" ]]; then
+    COMPOSE_APP_FILES+=(-f docker-compose.build.yml)
   fi
-  ui_hint "Building image from source${no_cache:+ without cache} (this may take a few minutes)..."
-  ui_warn "Local builds need network access to package registries."
-  docker compose -f docker-compose.yml -f docker-compose.build.yml build "${build_args[@]}" hodhod-app
+}
+
+# Rebuild from source and replace the running app container (database volume untouched).
+compose_rebuild_app() {
+  local no_cache="${1:-0}"
+  compose_app_files
+  if [[ "$no_cache" == "1" ]]; then
+    ui_hint "Building image without cache (this may take a few minutes)..."
+    ui_warn "Local builds need network access to package registries."
+    docker compose "${COMPOSE_APP_FILES[@]}" build --pull --no-cache hodhod-app
+    docker compose "${COMPOSE_APP_FILES[@]}" up -d --force-recreate --no-deps hodhod-app
+  else
+    ui_hint "Rebuilding image and recreating app container..."
+    docker compose "${COMPOSE_APP_FILES[@]}" up -d --build --force-recreate --no-deps hodhod-app
+  fi
+}
+
+# Pull prebuilt image and replace the running app container (database volume untouched).
+compose_pull_and_recreate_app() {
+  pull_hodhod_image || return 1
+  ui_hint "Recreating app container with pulled image..."
+  docker compose up -d --pull always --force-recreate --no-deps hodhod-app
 }
 
 compose_up_build_app() {
-  docker compose -f docker-compose.yml -f docker-compose.build.yml up -d hodhod-app
+  compose_rebuild_app 0
 }
 
 start_docker_app() {
   export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
   if [[ "$DEPLOY_MODE" == "build" ]]; then
-    compose_build_app 0
-    compose_up_build_app
+    compose_rebuild_app 0
     return
   fi
   ui_hint "Pulling prebuilt image: ${HODHOD_IMAGE}"
   if pull_hodhod_image; then
-    docker compose up -d hodhod-app
+    docker compose up -d --pull always --force-recreate --no-deps hodhod-app
     return
   fi
   handle_image_unavailable
@@ -830,22 +846,28 @@ do_update() {
   check_prereqs || return 1
   load_env
   export DB_PASSWORD HTTP_PORT HODHOD_IMAGE
-  local build_no_cache="${HODHOD_BUILD_NO_CACHE:-1}"
+  local build_no_cache="${HODHOD_BUILD_NO_CACHE:-0}"
+
+  if [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
+    ui_hint "Pulling latest code from git..."
+    if ! git -C "$ROOT" pull --ff-only 2>/dev/null; then
+      ui_warn "git pull failed or not fast-forward — continuing with current tree."
+    fi
+  fi
+
   if [[ "$DEPLOY_MODE" == "native" ]]; then
     compose_up_db
     install_native_binary 1
     maybe_sudo systemctl restart hodhod
   elif [[ "$DEPLOY_MODE" == "build" ]]; then
     compose_up_db
-    compose_build_app "$build_no_cache"
-    compose_up_build_app
+    compose_rebuild_app "$build_no_cache"
   else
     compose_up_db
-    pull_hodhod_image || { ui_err "Failed to pull ${HODHOD_IMAGE}"; return 1; }
-    docker compose up -d hodhod-app
+    compose_pull_and_recreate_app || { ui_err "Failed to pull ${HODHOD_IMAGE}"; return 1; }
   fi
   wait_health || true
-  ui_ok "Update complete."
+  ui_ok "Update complete (database volume preserved)."
 }
 
 do_remove() {
@@ -899,7 +921,7 @@ do_regen_secrets() {
   APP_ENCRYPTION_KEY=$(gen_secret)
   SESSION_SECRET=$(gen_hex)
   write_env
-  ui_ok "Secrets regenerated. Restart: docker compose up -d  (or systemctl restart hodhod)"
+  ui_ok "Secrets regenerated. Restart: bash install.sh (menu Update) or docker compose up -d --force-recreate hodhod-app"
 }
 
 do_nginx_ssl() {

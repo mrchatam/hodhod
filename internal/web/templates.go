@@ -38,6 +38,7 @@ func parseTemplates() (map[string]*template.Template, *template.Template, error)
 		"add":         func(a, b int) int { return a + b },
 		"sub":         func(a, b int) int { return a - b },
 		"seq":         seqPages,
+		"cssVer":      CSSAssetVersion,
 	}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
