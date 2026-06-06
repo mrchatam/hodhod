@@ -28,6 +28,51 @@ func TestHostMiddleware_mainHost(t *testing.T) {
 	}
 }
 
+func TestHostMiddleware_wwwAlias(t *testing.T) {
+	cfg := &config.Config{PublicBaseURL: "https://admin.example.com", AllowCustomDomains: true}
+	s := &Server{Cfg: cfg}
+	h := s.HostMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	req.Host = "www.admin.example.com"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+}
+
+func TestHostMiddleware_loopback(t *testing.T) {
+	cfg := &config.Config{PublicBaseURL: "https://admin.example.com", AllowCustomDomains: true}
+	s := &Server{Cfg: cfg}
+	h := s.HostMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	req.Host = "127.0.0.1:8080"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+}
+
+func TestHostMiddleware_staticBypass(t *testing.T) {
+	cfg := &config.Config{PublicBaseURL: "https://admin.example.com", AllowCustomDomains: true}
+	s := &Server{Cfg: cfg}
+	h := s.HostMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/static/app.css", nil)
+	req.Host = "wrong.example.com"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+}
+
 func TestRequireMainHost_blocksAgentHost(t *testing.T) {
 	s := &Server{}
 	h := s.requireMainHost(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

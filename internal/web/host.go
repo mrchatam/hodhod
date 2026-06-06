@@ -24,14 +24,14 @@ const (
 // HostMiddleware resolves the request host to main or agent-branded context.
 func (s *Server) HostMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return
 		}
 		reqHost := normalizeHost(r.Host)
 		mainHost := s.Cfg.MainHost()
 		ctx := r.Context()
-		if reqHost == mainHost || reqHost == "" {
+		if hostsMatch(reqHost, mainHost) {
 			ctx = context.WithValue(ctx, ctxHostKind, hostMain)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
@@ -49,6 +49,29 @@ func (s *Server) HostMiddleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ctxHostAgentID, agent.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func hostsMatch(reqHost, mainHost string) bool {
+	if reqHost == "" || mainHost == "" {
+		return reqHost == mainHost
+	}
+	if isLoopbackHost(reqHost) {
+		return true
+	}
+	return stripWWW(reqHost) == stripWWW(mainHost)
+}
+
+func stripWWW(host string) string {
+	return strings.TrimPrefix(host, "www.")
+}
+
+func isLoopbackHost(host string) bool {
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeHost(host string) string {
