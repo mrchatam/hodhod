@@ -31,8 +31,9 @@ jobs:
           tags: |
             ghcr.io/mrchatam/hodhod:latest
             ghcr.io/mrchatam/hodhod:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # ignore-error: stale/corrupt GHA cache only slows the build; image still publishes
+          cache-from: type=gha,ignore-error=true
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - uses: actions/setup-go@v5
         with:
