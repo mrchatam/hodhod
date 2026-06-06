@@ -60,6 +60,41 @@ func TestMergePanelUsersPage_hodhodOnly(t *testing.T) {
 	}
 }
 
+func TestMergePanelUsersPage_dedupesMultiInboundUsername(t *testing.T) {
+	panelUsers := []panels.UserInfo{
+		{Username: "u1@x", Enabled: true, InboundIDs: []int{1}},
+		{Username: "u1@x", Enabled: true, InboundIDs: []int{2}},
+	}
+	rows, stats := mergePanelUsersPage(panelUsers, nil, nil, []panels.InboundInfo{{ID: 1, Tag: "a"}, {ID: 2, Tag: "b"}}, panelUserFilters{Status: "all"}, 1)
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d want 1 deduped row", len(rows))
+	}
+	if len(rows[0].InboundIDs) != 2 {
+		t.Fatalf("inbound ids=%v want merged [1,2]", rows[0].InboundIDs)
+	}
+	if stats.Shown != 1 {
+		t.Fatalf("shown=%d", stats.Shown)
+	}
+}
+
+func TestNeedsLocalPanelUserMerge(t *testing.T) {
+	if !needsLocalPanelUserMerge(panelUserFilters{Inbound: "1"}) {
+		t.Fatal("inbound filter should need local merge")
+	}
+	if needsLocalPanelUserMerge(panelUserFilters{Query: "x"}) {
+		t.Fatal("query-only should use API pagination")
+	}
+}
+
+func TestPaginatePanelUserRows(t *testing.T) {
+	rows := []PanelUserRow{{Username: "a"}, {Username: "b"}, {Username: "c"}}
+	pag := Pagination{Page: 2, PerPage: 1, Total: 0}
+	sliced, pag := paginatePanelUserRows(rows, pag)
+	if len(sliced) != 1 || sliced[0].Username != "b" || pag.Total != 3 {
+		t.Fatalf("paginate got %v total=%d", sliced, pag.Total)
+	}
+}
+
 func TestMergePanelUsersPage_sourceBothFilter(t *testing.T) {
 	panelUsers := []panels.UserInfo{
 		{Username: "a@x", Enabled: true},

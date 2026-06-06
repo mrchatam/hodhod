@@ -53,11 +53,24 @@ func (s *Server) pageCustomers(w http.ResponseWriter, r *http.Request) {
 	perms, _ := s.permsFor(r, admin)
 	var rows []PanelUserRow
 	agents := s.agentNameMap(r.Context())
+
+	panelIDs := []int64{}
+	if panelID > 0 {
+		panelIDs = []int64{panelID}
+	} else {
+		panels, _ := s.Store.ListPanelsForAgent(r.Context(), agentID)
+		for _, p := range panels {
+			panelIDs = append(panelIDs, p.ID)
+		}
+	}
+	enrichByPanel, listErrs := s.loadAgentCustomerEnrich(r.Context(), agentID, panelIDs)
+
 	for _, v := range visible {
 		if !agentCanViewUser(v) {
 			continue
 		}
-		row := s.agentCustomerRow(r.Context(), v, agents, perms)
+		enrich := enrichByPanel[v.PanelID]
+		row := s.agentCustomerRow(v, agents, perms, enrich)
 		if q != "" && !strings.Contains(strings.ToLower(row.Username), strings.ToLower(q)) &&
 			!strings.Contains(strings.ToLower(row.Label), strings.ToLower(q)) {
 			continue
@@ -90,34 +103,77 @@ func (s *Server) pageCustomers(w http.ResponseWriter, r *http.Request) {
 	}
 	assignedPanels, _ := s.Store.ListPanelsForAgent(r.Context(), agentID)
 
+	var panelListErr error
+	for _, err := range listErrs {
+		if err != nil {
+			panelListErr = err
+			break
+		}
+	}
+
 	s.renderPage(w, "agent_customers", r, map[string]any{
 		"Rows": pageRows, "Query": q, "StatusFilter": status, "PanelID": panelID,
 		"Pagination": pag, "CanCreate": canCreate && s.canPerm(r, admin, db.PermCreateUser),
-		"Panels": assignedPanels,
+		"Panels": assignedPanels, "PanelListErr": panelListErr,
 	})
 }
 
-func (s *Server) agentCustomerRow(ctx context.Context, v agentVisibleUser, agents map[int64]string, perms *db.AgentPermissions) PanelUserRow {
-	row := PanelUserRow{Username: v.Username, ServiceID: v.ServiceID, PanelID: v.PanelID}
-	if v.ServiceID > 0 {
-		if svc, err := s.Store.GetService(ctx, v.ServiceID); err == nil {
-			row = panelUserRowFromService(*svc, agents)
-			row.PanelID = v.PanelID
+type agentCustomerEnrich struct {
+	panelUsers  map[string]panels.UserInfo
+	inboundTags map[int]string
+	services    map[int64]db.Service
+}
+
+func (s *Server) loadAgentCustomerEnrich(ctx context.Context, agentID int64, panelIDs []int64) (map[int64]*agentCustomerEnrich, map[int64]error) {
+	out := map[int64]*agentCustomerEnrich{}
+	errs := map[int64]error{}
+	svcs, _ := s.Store.ListServicesByAgent(ctx, agentID)
+	for _, pid := range panelIDs {
+		client, err := s.Panels.Get(ctx, pid)
+		if err != nil {
+			errs[pid] = err
+			continue
+		}
+		inbounds, _ := client.ListInbounds(ctx)
+		tagMap := map[int]string{}
+		for _, inb := range inbounds {
+			tagMap[inb.ID] = inb.Tag
+		}
+		users, err := client.ListUsers(ctx)
+		if err != nil {
+			errs[pid] = err
+			continue
+		}
+		byUser := map[string]panels.UserInfo{}
+		for _, u := range dedupePanelUsersByUsername(users) {
+			byUser[u.Username] = u
+		}
+		panelSvcs := map[int64]db.Service{}
+		for _, svc := range svcs {
+			if svc.PanelID == pid {
+				panelSvcs[svc.ID] = svc
+			}
+		}
+		out[pid] = &agentCustomerEnrich{
+			panelUsers: byUser, inboundTags: tagMap, services: panelSvcs,
 		}
 	}
-	client, err := s.Panels.Get(ctx, v.PanelID)
-	if err == nil {
-		if u, err := client.GetUser(ctx, v.Username); err == nil {
-			inbounds, _ := client.ListInbounds(ctx)
-			tagMap := map[int]string{}
-			for _, inb := range inbounds {
-				tagMap[inb.ID] = inb.Tag
-			}
-			panelRow := panelUserRowFromPanel(*u, tagMap)
+	return out, errs
+}
+
+func (s *Server) agentCustomerRow(v agentVisibleUser, agents map[int64]string, perms *db.AgentPermissions, enrich *agentCustomerEnrich) PanelUserRow {
+	row := PanelUserRow{Username: v.Username, ServiceID: v.ServiceID, PanelID: v.PanelID}
+	if enrich != nil {
+		if svc, ok := enrich.services[v.ServiceID]; ok && v.ServiceID > 0 {
+			row = panelUserRowFromService(svc, agents)
+			row.PanelID = v.PanelID
+		}
+		if u, ok := enrich.panelUsers[v.Username]; ok {
+			panelRow := panelUserRowFromPanel(u, enrich.inboundTags)
 			row.SubLink = u.SubscriptionURL
 			if v.ServiceID > 0 {
-				if svc, err := s.Store.GetService(ctx, v.ServiceID); err == nil {
-					row = mergePanelUserWithService(panelRow, *svc, agents)
+				if svc, ok := enrich.services[v.ServiceID]; ok {
+					row = mergePanelUserWithService(panelRow, svc, agents)
 				}
 			} else {
 				row = panelRow
@@ -179,12 +235,17 @@ func (s *Server) pageAgentPanelCustomers(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "error", http.StatusInternalServerError)
 		return
 	}
+	enrichByPanel, listErrs := s.loadAgentCustomerEnrich(r.Context(), agentID, []int64{panelID})
+	var panelListErr error
+	if err := listErrs[panelID]; err != nil {
+		panelListErr = err
+	}
 	var rows []PanelUserRow
 	for _, v := range visible {
 		if !agentCanViewUser(v) {
 			continue
 		}
-		row := s.agentCustomerRow(r.Context(), v, agents, perms)
+		row := s.agentCustomerRow(v, agents, perms, enrichByPanel[panelID])
 		if matchPanelUserFilters(row, panelUserFilters{Query: f.Query, Status: f.Status}) {
 			rows = append(rows, row)
 		}
@@ -199,27 +260,13 @@ func (s *Server) pageAgentPanelCustomers(w http.ResponseWriter, r *http.Request)
 		end = len(rows)
 	}
 	canCreate, _ := s.agentPanelCanCreate(r.Context(), agentID, panelID)
-	createInbounds, _ := s.Store.ListAgentInboundCreateIDs(r.Context(), agentID, panelID)
 	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
-	var inboundRows []panels.InboundInfo
-	if client, err := s.Panels.Get(r.Context(), panelID); err == nil {
-		allInb, _ := client.ListInbounds(r.Context())
-		grantSet := map[int]bool{}
-		for _, id := range createInbounds {
-			grantSet[id] = true
-		}
-		for _, inb := range allInb {
-			if grantSet[inb.ID] {
-				inboundRows = append(inboundRows, inb)
-			}
-		}
-	}
 
 	s.renderPage(w, "agent_panel_customers", r, map[string]any{
 		"Panel": panel, "Rows": rows[start:end], "Filters": f, "Pagination": pag,
 		"CanCreate": canCreate && s.canPerm(r, admin, db.PermCreateUser),
 		"Perms": perms, "ShowCreateModal": r.URL.Query().Get("create") == "1",
-		"CreateInbounds": createInbounds, "InboundRows": inboundRows, "Templates": templates,
+		"Templates": templates, "PanelListErr": panelListErr,
 	})
 }
 
@@ -244,9 +291,27 @@ func (s *Server) postAgentPanelUser(w http.ResponseWriter, r *http.Request) {
 	if dur <= 0 {
 		dur = 30
 	}
-	inboundIDs := inboundIDsFromForm(r.Form["inbound_ids"], r.FormValue("inbound_ids"), 0)
+	label := r.FormValue("label")
+	note := r.FormValue("note")
+	var inboundIDs []int
+	templates, _ := loadUserCreateTemplates(r.Context(), s.Store, panelID)
+	if tpl, ok := findUserCreateTemplate(templates, r.FormValue("template_name")); ok {
+		if tpl.VolumeGB > 0 {
+			vol = tpl.VolumeGB
+		}
+		if tpl.DurationDays > 0 {
+			dur = tpl.DurationDays
+		}
+		if tpl.Note != "" && note == "" {
+			note = tpl.Note
+		}
+		if label == "" && tpl.Note != "" {
+			label = tpl.Note
+		}
+		inboundIDs = tpl.InboundIDs
+	}
 	svc, err := s.Sales.CreateManualService(r.Context(), sales.CreateManualInput{
-		AgentID: agentID, PanelID: panelID, Label: r.FormValue("label"), Contact: r.FormValue("contact"),
+		AgentID: agentID, PanelID: panelID, Label: label, Contact: r.FormValue("contact"),
 		VolumeGB: vol, DurationDays: dur, AdminID: admin.ID, IsMaster: false, InboundIDs: inboundIDs,
 	})
 	if err != nil {

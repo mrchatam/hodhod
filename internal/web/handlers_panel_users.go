@@ -1,8 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -51,6 +53,29 @@ func (s *Server) loadPanelUsersViewData(r *http.Request, panel *db.Panel) map[st
 		return s.panelUsersHodhodData(r, panel, inbounds, f, pag, agents, templates, allAgents)
 	}
 
+	allServices, _ := s.Store.ListServicesForPanel(r.Context(), panelID)
+
+	if needsLocalPanelUserMerge(f) {
+		allUsers, err := client.ListUsers(r.Context())
+		var panelErr error
+		var rows []PanelUserRow
+		stats := panelUserStats{}
+		if err != nil {
+			panelErr = err
+		} else {
+			rows, stats = mergePanelUsers(allUsers, allServices, agents, inbounds, f)
+			rows, pag = paginatePanelUserRows(rows, pag)
+			stats.Shown = len(rows)
+			stats.PanelCount = len(dedupePanelUsersByUsername(allUsers))
+		}
+		return s.panelUsersPageData(r, panel, inbounds, rows, panelErr, map[string]any{
+			"Stats": stats, "Filters": f, "Templates": templates, "Agents": allAgents,
+			"PanelListErr": panelErr, "Pagination": pag,
+			"PanelEmptyHint": panelErr == nil && len(rows) == 0 && stats.PanelCount == 0,
+			"CanDelDepleted": panel.Type == db.PanelXUI,
+		})
+	}
+
 	statusFilter := f.Status
 	if statusFilter == "all" {
 		statusFilter = ""
@@ -66,7 +91,6 @@ func (s *Server) loadPanelUsersViewData(r *http.Request, panel *db.Panel) map[st
 		panelErr = err
 	} else {
 		apiPage = page
-		allServices, _ := s.Store.ListServicesForPanel(r.Context(), panelID)
 		rows, stats = mergePanelUsersPage(page.Users, allServices, agents, inbounds, f, pag.Page)
 		rows = enrichPanelUserOnline(r.Context(), client, rows)
 		if f.Source == "both" {
@@ -77,7 +101,6 @@ func (s *Server) loadPanelUsersViewData(r *http.Request, panel *db.Panel) map[st
 				}
 			}
 			rows = filtered
-			stats.Shown = len(rows)
 		}
 		if f.Source == "panel" {
 			for i := range rows {
@@ -86,6 +109,7 @@ func (s *Server) loadPanelUsersViewData(r *http.Request, panel *db.Panel) map[st
 				}
 			}
 		}
+		stats.Shown = len(rows)
 		pag.Total = page.Filtered
 		if pag.Total == 0 {
 			pag.Total = page.Total
@@ -392,11 +416,21 @@ func (s *Server) renderPanelUserRow(w http.ResponseWriter, r *http.Request, pane
 	for _, inb := range inbounds {
 		tagMap[inb.ID] = inb.Tag
 	}
-	u, err := client.GetUser(r.Context(), email)
 	row := PanelUserRow{Username: email, HodhodOnly: false, Source: "panel"}
-	if err == nil {
-		row = panelUserRowFromPanel(*u, tagMap)
-		row.Source = "panel"
+	if users, err := client.ListUsers(r.Context()); err == nil {
+		for _, u := range dedupePanelUsersByUsername(users) {
+			if u.Username == email {
+				row = panelUserRowFromPanel(u, tagMap)
+				row.Source = "panel"
+				break
+			}
+		}
+	}
+	if row.InboundIDs == nil && row.InboundTags == nil {
+		if u, err := client.GetUser(r.Context(), email); err == nil {
+			row = panelUserRowFromPanel(*u, tagMap)
+			row.Source = "panel"
+		}
 	}
 	if svc, err := s.Store.GetServiceByPanelUsername(r.Context(), panelID, email); err == nil {
 		agents := s.agentNameMap(r.Context())
@@ -420,9 +454,13 @@ func (s *Server) renderPanelUserRow(w http.ResponseWriter, r *http.Request, pane
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
 	}
-	if err := t.ExecuteTemplate(w, "panel_user_row", data); err != nil {
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, "panel_user_row", data); err != nil {
+		slog.Error("template error", "partial", "panel_user_row", "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
+		return
 	}
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (s *Server) postPanelUserModify(w http.ResponseWriter, r *http.Request) {

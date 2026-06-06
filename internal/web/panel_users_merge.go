@@ -45,6 +45,53 @@ type panelUserStats struct {
 	Shown       int
 }
 
+func needsLocalPanelUserMerge(f panelUserFilters) bool {
+	if f.Inbound != "" || f.AgentID > 0 {
+		return true
+	}
+	switch f.Source {
+	case "panel", "hodhod", "both":
+		return true
+	default:
+		return false
+	}
+}
+
+func dedupePanelUsersByUsername(users []panels.UserInfo) []panels.UserInfo {
+	panelByUser := map[string]panels.UserInfo{}
+	order := []string{}
+	for _, u := range users {
+		if u.Username == "" {
+			continue
+		}
+		if existing, ok := panelByUser[u.Username]; ok {
+			u.InboundIDs = mergeIntSlices(existing.InboundIDs, u.InboundIDs)
+			u.InboundTags = mergeStrSlices(existing.InboundTags, u.InboundTags)
+		} else {
+			order = append(order, u.Username)
+		}
+		panelByUser[u.Username] = u
+	}
+	out := make([]panels.UserInfo, 0, len(order))
+	for _, name := range order {
+		out = append(out, panelByUser[name])
+	}
+	return out
+}
+
+func paginatePanelUserRows(rows []PanelUserRow, pag Pagination) ([]PanelUserRow, Pagination) {
+	pag.Total = len(rows)
+	start := pag.Offset()
+	end := start + pag.PerPage
+	if start > len(rows) {
+		start = len(rows)
+	}
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end], pag
+}
+
 func mergePanelUsers(panelUsers []panels.UserInfo, services []db.Service, agents map[int64]string, inbounds []panels.InboundInfo, f panelUserFilters) ([]PanelUserRow, panelUserStats) {
 	inboundTags := map[int]string{}
 	for _, inb := range inbounds {
@@ -106,8 +153,8 @@ func mergePanelUsers(panelUsers []panels.UserInfo, services []db.Service, agents
 }
 
 // mergePanelUsersPage merges one page of panel users with Hodhod services.
-// allServices is every Hodhod service on the panel; hodhod-only rows (not on this API page) append on page 1 when source filter is empty.
 func mergePanelUsersPage(panelUsers []panels.UserInfo, allServices []db.Service, agents map[int64]string, inbounds []panels.InboundInfo, f panelUserFilters, pageNum int) ([]PanelUserRow, panelUserStats) {
+	panelUsers = dedupePanelUsersByUsername(panelUsers)
 	inboundTags := map[int]string{}
 	for _, inb := range inbounds {
 		inboundTags[inb.ID] = inb.Tag

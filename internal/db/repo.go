@@ -472,6 +472,14 @@ func (s *Store) GetServiceByPanelUsername(ctx context.Context, panelID int64, us
 	return &svc, err
 }
 
+func (s *Store) ServiceExistsByPanelUsername(ctx context.Context, panelID int64, username string) (bool, error) {
+	var n int64
+	err := s.DB.WithContext(ctx).Model(&Service{}).
+		Where("panel_id = ? AND panel_username = ?", panelID, username).
+		Limit(1).Count(&n).Error
+	return n > 0, err
+}
+
 func (s *Store) UpdateService(ctx context.Context, botID int64, svc *Service) error {
 	return s.DB.WithContext(ctx).Where("bot_id = ?", botID).Save(svc).Error
 }

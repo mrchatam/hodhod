@@ -3,9 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -143,17 +141,30 @@ func (s *Server) pageAgentEdit(w http.ResponseWriter, r *http.Request) {
 	for _, g := range userGrantsByPanel[accessPanelID] {
 		grantByUser[g.PanelUsername] = g
 	}
+	seenUser := map[string]bool{}
 	for _, au := range accessUsers {
 		if au.PanelID != accessPanelID {
 			continue
 		}
 		for _, u := range au.Users {
+			if seenUser[u.Username] {
+				continue
+			}
+			seenUser[u.Username] = true
 			g := grantByUser[u.Username]
 			accessUserRows = append(accessUserRows, accessUserRow{
 				Username: u.Username, AllowView: g.AllowView, AllowModify: g.AllowModify,
 			})
 		}
 		break
+	}
+	for username, g := range grantByUser {
+		if seenUser[username] {
+			continue
+		}
+		accessUserRows = append(accessUserRows, accessUserRow{
+			Username: username, AllowView: g.AllowView, AllowModify: g.AllowModify,
+		})
 	}
 	s.renderPage(w, "agent_edit", r, map[string]any{
 		"Agent": agent, "Perms": perms, "AgentPanels": agentPanels, "PanelRows": panelRows,
@@ -181,44 +192,9 @@ func (s *Server) postAgentAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var userGrants []db.AgentUserGrant
-	for key, val := range r.Form {
-		if !strings.HasPrefix(key, "user_") || val[0] != "on" {
-			continue
-		}
-		parts := strings.SplitN(strings.TrimPrefix(key, "user_"), "_", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		username, err := url.PathUnescape(parts[0])
-		if err != nil {
-			username = parts[0]
-		}
-		g := db.AgentUserGrant{PanelUsername: username}
-		switch parts[1] {
-		case "view":
-			g.AllowView = true
-		case "modify":
-			g.AllowModify = true
-		default:
-			continue
-		}
-		found := false
-		for i := range userGrants {
-			if userGrants[i].PanelUsername == username {
-				if parts[1] == "view" {
-					userGrants[i].AllowView = true
-				} else {
-					userGrants[i].AllowModify = true
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
-			userGrants = append(userGrants, g)
-		}
-	}
-	err := s.Store.ReplaceAgentUserGrants(r.Context(), id, panelID, userGrants)
+	userGrants = parseUserGrantsFromForm(r.Form)
+	tableUsers := parseAccessTableUsernames(r.Form)
+	err := s.Store.SaveAgentUserGrants(r.Context(), id, panelID, tableUsers, userGrants)
 	s.saveFlash(w, err, "Access saved")
 	http.Redirect(w, r, fmt.Sprintf("/master/agents/%d?access_panel=%d#tab-panels", id, panelID), http.StatusSeeOther)
 }
@@ -362,9 +338,11 @@ func (s *Server) postAgentAttachInboundUsers(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	inboundSet := map[int]bool{inboundID: true}
+	seen := map[string]bool{}
 	var names []string
 	for _, u := range users {
-		if userOnInbound(u, inboundSet) {
+		if userOnInbound(u, inboundSet) && u.Username != "" && !seen[u.Username] {
+			seen[u.Username] = true
 			names = append(names, u.Username)
 		}
 	}

@@ -1,20 +1,18 @@
 package web
 
-import (
-	"errors"
-	"testing"
-)
+import "testing"
 
-func TestPanelTestMessage_ok(t *testing.T) {
-	ok, msg := panelTestMessage("en", nil)
-	if !ok || msg == "" {
-		t.Fatalf("got ok=%v msg=%q", ok, msg)
+func TestEncodeDecodeFlashValue(t *testing.T) {
+	raw := encodeFlashValue("ok", "ذخیره شد")
+	kind, msg, ok := decodeFlashCookie(raw)
+	if !ok || kind != "ok" || msg != "ذخیره شد" {
+		t.Fatalf("decode failed: ok=%v kind=%q msg=%q", ok, kind, msg)
 	}
 }
 
-func TestPanelTestMessage_fail(t *testing.T) {
-	ok, msg := panelTestMessage("en", errors.New("login status 401"))
-	if ok || msg == "" {
-		t.Fatalf("got ok=%v msg=%q", ok, msg)
+func TestDecodeFlashValue_legacyPlain(t *testing.T) {
+	kind, msg, ok := decodeFlashCookie("err:plain message")
+	if !ok || kind != "err" || msg != "plain message" {
+		t.Fatalf("legacy decode failed: %q %q", kind, msg)
 	}
 }

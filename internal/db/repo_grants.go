@@ -115,3 +115,44 @@ func (s *Store) ReplaceAgentUserGrants(ctx context.Context, agentID, panelID int
 		return tx.Create(&grants).Error
 	})
 }
+
+// SaveAgentUserGrants merges access-form grants with existing rows.
+// Users listed in tableUsernames get view/modify from formGrants (missing = revoked).
+// Existing grants for usernames not in tableUsernames are preserved (bulk attach survives inbound-only saves).
+func (s *Store) SaveAgentUserGrants(ctx context.Context, agentID, panelID int64, tableUsernames []string, formGrants []AgentUserGrant) error {
+	existing, err := s.ListAgentUserGrants(ctx, agentID, panelID)
+	if err != nil {
+		return err
+	}
+	tableSet := map[string]bool{}
+	for _, u := range tableUsernames {
+		if u != "" {
+			tableSet[u] = true
+		}
+	}
+	formByUser := map[string]AgentUserGrant{}
+	for _, g := range formGrants {
+		formByUser[g.PanelUsername] = g
+	}
+	merged := map[string]AgentUserGrant{}
+	for _, g := range existing {
+		if !tableSet[g.PanelUsername] {
+			merged[g.PanelUsername] = g
+		}
+	}
+	for username := range tableSet {
+		g, ok := formByUser[username]
+		if !ok || (!g.AllowView && !g.AllowModify) {
+			continue
+		}
+		g.AgentID = agentID
+		g.PanelID = panelID
+		g.PanelUsername = username
+		merged[username] = g
+	}
+	var out []AgentUserGrant
+	for _, g := range merged {
+		out = append(out, g)
+	}
+	return s.ReplaceAgentUserGrants(ctx, agentID, panelID, out)
+}

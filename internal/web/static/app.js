@@ -222,10 +222,12 @@
     var days = $('#create-days');
     var note = $('#create-note');
     var ip = $('#create-ip');
+    var tplName = $('#create-template-name');
     if (vol) vol.value = btn.dataset.volume || 30;
     if (days) days.value = btn.dataset.days || 30;
     if (note) note.value = btn.dataset.note || '';
     if (ip) ip.value = btn.dataset.ip || 0;
+    if (tplName) tplName.value = btn.dataset.name || '';
     var ids = (btn.dataset.inbounds || '').split(',').filter(Boolean);
     $$('.inbound-cb').forEach(function (cb) {
       if (cb.type === 'radio') {

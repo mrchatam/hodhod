@@ -1,6 +1,9 @@
 package web
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -41,15 +44,19 @@ func (s *Server) renderPage(w http.ResponseWriter, page string, r *http.Request,
 	for k, v := range extra {
 		data[k] = v
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	t, ok := s.pages[page]
 	if !ok {
 		http.Error(w, "unknown page", http.StatusInternalServerError)
 		return
 	}
-	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, "layout", data); err != nil {
+		slog.Error("template error", "page", page, "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (s *Server) renderPartial(w http.ResponseWriter, page, partial string, data map[string]any) {
@@ -58,10 +65,14 @@ func (s *Server) renderPartial(w http.ResponseWriter, page, partial string, data
 		http.Error(w, "unknown page", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := t.ExecuteTemplate(w, partial, data); err != nil {
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, partial, data); err != nil {
+		slog.Error("template error", "page", page, "partial", partial, "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(buf.Bytes())
 }
 
 func panelTestMessage(lang string, err error) (ok bool, msg string) {
@@ -92,12 +103,30 @@ func (s *Server) agentID(admin *db.Admin) (int64, bool) {
 	return *admin.AgentID, true
 }
 
+func encodeFlashValue(kind, msg string) string {
+	return kind + ":" + base64.RawURLEncoding.EncodeToString([]byte(msg))
+}
+
+func decodeFlashCookie(raw string) (kind, msg string, ok bool) {
+	parts := splitOnce(raw, ":")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	if b, err := base64.RawURLEncoding.DecodeString(parts[1]); err == nil {
+		return parts[0], string(b), true
+	}
+	return parts[0], parts[1], true
+}
+
 func (s *Server) setFlash(w http.ResponseWriter, kind, msg string) {
-	http.SetCookie(w, &http.Cookie{Name: "hodhod_flash", Value: kind + ":" + msg, Path: "/", MaxAge: 60})
+	http.SetCookie(w, &http.Cookie{Name: "hodhod_flash", Value: encodeFlashValue(kind, msg), Path: "/", MaxAge: 60})
 }
 
 func (s *Server) saveFlash(w http.ResponseWriter, err error, okMsg string) {
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		slog.Error("save failed", "err", err)
 		s.setFlash(w, "err", friendlySaveErr(err))
 		return
@@ -121,11 +150,11 @@ func (s *Server) popFlash(r *http.Request) map[string]string {
 	if err != nil {
 		return nil
 	}
-	parts := splitOnce(c.Value, ":")
-	if len(parts) != 2 {
+	kind, msg, ok := decodeFlashCookie(c.Value)
+	if !ok {
 		return nil
 	}
-	return map[string]string{"Kind": parts[0], "Msg": parts[1]}
+	return map[string]string{"Kind": kind, "Msg": msg}
 }
 
 func splitOnce(s, sep string) []string {

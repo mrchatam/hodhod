@@ -160,8 +160,6 @@ func (s *Service) CreateManualService(ctx context.Context, in CreateManualInput)
 				picked = append(picked, id)
 			}
 			scope = panels.Scope{InboundIDs: picked}
-		} else if len(scope.InboundIDs) > 1 {
-			return nil, fmt.Errorf("sales: select an inbound")
 		}
 	}
 	limitBytes := int64(in.VolumeGB) * 1024 * 1024 * 1024

@@ -23,6 +23,13 @@ func TestAgentCanViewUser_userGrant(t *testing.T) {
 	}
 }
 
+func TestAgentCanViewUser_modifyOnlyGrant(t *testing.T) {
+	v := agentVisibleUser{UserGrant: &db.AgentUserGrant{AllowModify: true}}
+	if !agentCanViewUser(v) {
+		t.Fatal("modify-only grant should be visible")
+	}
+}
+
 func TestAgentCanViewUser_inbound(t *testing.T) {
 	v := agentVisibleUser{InboundVisible: true}
 	if !agentCanViewUser(v) {

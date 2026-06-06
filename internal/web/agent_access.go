@@ -91,7 +91,7 @@ func (s *Server) buildAgentVisibleUsers(ctx context.Context, agentID int64, pane
 		return nil, err
 	}
 	for _, g := range userGrants {
-		if !g.AllowView {
+		if !g.AllowView && !g.AllowModify {
 			continue
 		}
 		k := agentUserKeyStr(g.PanelID, g.PanelUsername)
@@ -158,7 +158,7 @@ func agentCanViewUser(v agentVisibleUser) bool {
 	if v.OwnCreate {
 		return true
 	}
-	if v.UserGrant != nil && v.UserGrant.AllowView {
+	if v.UserGrant != nil && (v.UserGrant.AllowView || v.UserGrant.AllowModify) {
 		return true
 	}
 	if v.InboundVisible {
@@ -229,6 +229,66 @@ func parseInboundGrantsFromForm(form url.Values) []db.AgentInboundGrant {
 	return inboundGrants
 }
 
+func parseUserGrantsFromForm(form url.Values) []db.AgentUserGrant {
+	var userGrants []db.AgentUserGrant
+	for key, val := range form {
+		if !strings.HasPrefix(key, "user_") || len(val) == 0 || val[0] != "on" {
+			continue
+		}
+		parts := strings.SplitN(strings.TrimPrefix(key, "user_"), "_", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		username, err := url.PathUnescape(parts[0])
+		if err != nil {
+			username = parts[0]
+		}
+		g := db.AgentUserGrant{PanelUsername: username}
+		switch parts[1] {
+		case "view":
+			g.AllowView = true
+		case "modify":
+			g.AllowModify = true
+		default:
+			continue
+		}
+		found := false
+		for i := range userGrants {
+			if userGrants[i].PanelUsername == username {
+				if parts[1] == "view" {
+					userGrants[i].AllowView = true
+				} else {
+					userGrants[i].AllowModify = true
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			userGrants = append(userGrants, g)
+		}
+	}
+	return userGrants
+}
+
+func parseAccessTableUsernames(form url.Values) []string {
+	raw := form.Get("access_user_names")
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		u, err := url.PathUnescape(strings.TrimSpace(part))
+		if err != nil {
+			u = strings.TrimSpace(part)
+		}
+		if u != "" {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
 func (s *Server) attachPanelUsersToAgent(ctx context.Context, agentID, panelID int64, usernames []string) (int, error) {
 	client, err := s.Panels.Get(ctx, panelID)
 	if err != nil {
@@ -245,7 +305,11 @@ func (s *Server) attachPanelUsersToAgent(ctx context.Context, agentID, panelID i
 		}); err != nil {
 			return attached, err
 		}
-		if _, err := s.Store.GetServiceByPanelUsername(ctx, panelID, username); err != nil {
+		exists, err := s.Store.ServiceExistsByPanelUsername(ctx, panelID, username)
+		if err != nil {
+			return attached, err
+		}
+		if !exists {
 			sub, _ := client.SubscriptionURL(ctx, username)
 			u, uerr := client.GetUser(ctx, username)
 			svc := &db.Service{

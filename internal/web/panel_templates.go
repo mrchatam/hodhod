@@ -61,6 +61,19 @@ func saveUserCreateTemplate(ctx context.Context, store *db.Store, panelID int64,
 	return store.SetSetting(ctx, "panel", panelID, userCreateTemplatesKey, string(b))
 }
 
+func findUserCreateTemplate(templates []UserCreateTemplate, name string) (*UserCreateTemplate, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, false
+	}
+	for i := range templates {
+		if strings.EqualFold(templates[i].Name, name) {
+			return &templates[i], true
+		}
+	}
+	return nil, false
+}
+
 func deleteUserCreateTemplate(ctx context.Context, store *db.Store, panelID int64, name string) error {
 	list, err := loadUserCreateTemplates(ctx, store, panelID)
 	if err != nil {

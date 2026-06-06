@@ -135,6 +135,7 @@
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <input type="hidden" name="panel_id" value="{{.AccessPanelID}}">
     <h3 class="font-semibold">{{T .Lang "access.inbound_table"}} — {{T .Lang "table.panel"}} {{.AccessPanelID}}</h3>
+    <p class="form-hint">{{T .Lang "access.attach_hint"}}</p>
     <div class="overflow-x-auto">
       <table class="data-table text-sm">
         <thead><tr><th>{{T .Lang "panel_users.inbound"}}</th><th>{{T .Lang "access.allow_create"}}</th><th>{{T .Lang "access.allow_view_users"}}</th><th></th></tr></thead>
@@ -145,7 +146,7 @@
           <td><input type="checkbox" name="inbound_{{.InboundID}}_create" {{if .AllowCreate}}checked{{end}}></td>
           <td><input type="checkbox" name="inbound_{{.InboundID}}_view" {{if .AllowViewUsers}}checked{{end}}></td>
           <td class="text-end">
-            <button type="submit" formaction="/master/agents/{{$.Agent.ID}}/attach-inbound-users" formmethod="post" name="inbound_id" value="{{.InboundID}}" class="btn btn-secondary btn-sm">{{T $.Lang "access.attach_all_users"}}</button>
+            <button type="submit" formaction="/master/agents/{{$.Agent.ID}}/attach-inbound-users" formmethod="post" name="inbound_id" value="{{.InboundID}}" class="btn btn-secondary btn-sm">{{T $.Lang "access.attach_inbound_users"}}</button>
           </td>
         </tr>
         {{end}}
@@ -153,6 +154,8 @@
       </table>
     </div>
     <h3 class="font-semibold">{{T .Lang "access.user_table"}}</h3>
+    <p class="form-hint">{{T .Lang "access.user_grant_hint"}}</p>
+    <input type="hidden" name="access_user_names" value="{{range $i, $u := .AccessUserRows}}{{if $i}},{{end}}{{urlPath $u.Username}}{{end}}">
     <div class="overflow-x-auto max-h-64 overflow-y-auto">
       <table class="data-table text-sm">
         <thead><tr><th>{{T .Lang "table.username"}}</th><th>{{T .Lang "access.allow_view"}}</th><th>{{T .Lang "access.allow_modify"}}</th></tr></thead>
