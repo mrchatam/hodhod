@@ -197,6 +197,11 @@ func (s *Server) postBotSettings(w http.ResponseWriter, r *http.Request) {
 		keys := []string{"warn_percent", "currency", "topup_min_toman", "topup_max_toman",
 			"trial_enabled", "trial_duration_hours", "trial_volume_gb", "trial_max_per_user"}
 		botconfig.SaveSettingsKeys(s.Store, r.Context(), id, keys, formMap(r))
+		trialVal := "false"
+		if r.FormValue("trial_enabled") == "true" {
+			trialVal = "true"
+		}
+		_ = s.Store.SetSetting(r.Context(), "bot", id, "trial_enabled", trialVal)
 		if mode := r.FormValue("card_display_mode"); mode != "" {
 			bot.CardDisplayMode = mode
 			_ = s.Store.UpdateBot(r.Context(), bot)
@@ -205,12 +210,22 @@ func (s *Server) postBotSettings(w http.ResponseWriter, r *http.Request) {
 		keys := []string{"welcome_text_fa", "welcome_text_en", "help_text_fa", "help_text_en", "support_contact"}
 		botconfig.SaveSettingsKeys(s.Store, r.Context(), id, keys, formMap(r))
 	case "notify":
-		keys := []string{"approver_tg_id"}
+		keys := []string{"approver_tg_id", "expiry_warn_days", "notify_receipt_pending", "notify_purchase", "notify_new_user", "notify_webhook_error"}
 		botconfig.SaveSettingsKeys(s.Store, r.Context(), id, keys, formMap(r))
 		_ = s.Store.ReplaceNotificationTargets(r.Context(), id, botconfig.ParseApproverField(r.FormValue("approver_tg_id")))
-	default:
-		keys := []string{"approver_tg_id", "support_contact", "welcome_text", "card_numbers", "warn_percent", "force_join_channel", "currency"}
-		botconfig.SaveSettingsKeys(s.Store, r.Context(), id, keys, formMap(r))
+		for _, k := range []string{"notify_receipt_pending", "notify_purchase", "notify_new_user", "notify_webhook_error"} {
+			v := "false"
+			if r.FormValue(k) == "true" {
+				v = "true"
+			}
+			_ = s.Store.SetSetting(r.Context(), "bot", id, k, v)
+		}
+	case "menu":
+		for _, btn := range mustMenu(r, s, id) {
+			enabled := r.FormValue("menu_"+btn.ButtonKey) == "on"
+			btn.Enabled = enabled
+			_ = s.Store.UpsertMenuButton(r.Context(), &btn)
+		}
 	}
 	s.audit(r, &admin.ID, "bot_settings_save", "bot", id, map[string]any{"tab": tab})
 	s.setFlash(w, "ok", "Settings saved")
@@ -326,7 +341,11 @@ func (s *Server) postBotUserWalletAdjust(w http.ResponseWriter, r *http.Request)
 	if reason == "" {
 		reason = "admin_adjust"
 	}
-	_ = s.BotSvc.AdjustWallet(r.Context(), s.Wallet, botID, uid, delta, reason)
+	if err := s.BotSvc.AdjustWallet(r.Context(), s.Wallet, botID, uid, delta, reason); err != nil {
+		s.setFlash(w, "err", err.Error())
+		http.Redirect(w, r, fmt.Sprintf("%s/bots/%d/users/%d", scope.Base, botID, uid), http.StatusSeeOther)
+		return
+	}
 	s.audit(r, &admin.ID, "wallet_adjust", "end_user", uid, map[string]any{"bot_id": botID, "delta": delta})
 	http.Redirect(w, r, fmt.Sprintf("%s/bots/%d/users/%d", scope.Base, botID, uid), http.StatusSeeOther)
 }
@@ -357,4 +376,83 @@ func (s *Server) postBotCardDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.Store.DeletePaymentCard(r.Context(), botID, cid)
 	http.Redirect(w, r, botconfig.RedirectSettings(scope, botID)+"?tab=cards", http.StatusSeeOther)
+}
+
+func (s *Server) postBotCardUpdate(w http.ResponseWriter, r *http.Request) {
+	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	cid, _ := strconv.ParseInt(chi.URLParam(r, "cid"), 10, 64)
+	_, scope, ok := s.requireBotManage(r, botID)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	_ = r.ParseForm()
+	c, err := s.Store.GetPaymentCard(r.Context(), botID, cid)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if v := r.FormValue("label"); v != "" {
+		c.Label = v
+	}
+	if v := r.FormValue("card_number"); v != "" {
+		c.CardNumber = v
+	}
+	if v := r.FormValue("holder_name"); v != "" {
+		c.HolderName = v
+	}
+	if v := r.FormValue("weight"); v != "" {
+		c.Weight, _ = strconv.Atoi(v)
+	}
+	c.Active = r.FormValue("active") == "on"
+	_ = s.Store.UpdatePaymentCard(r.Context(), c)
+	http.Redirect(w, r, botconfig.RedirectSettings(scope, botID)+"?tab=cards", http.StatusSeeOther)
+}
+
+func (s *Server) postBotChannel(w http.ResponseWriter, r *http.Request) {
+	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	_, scope, ok := s.requireBotManage(r, botID)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	_ = r.ParseForm()
+	count, _ := s.Store.ListBotChannels(r.Context(), botID)
+	if len(count) >= 5 {
+		s.setFlash(w, "err", "Maximum 5 channels allowed")
+		http.Redirect(w, r, botconfig.RedirectSettings(scope, botID)+"?tab=channels", http.StatusSeeOther)
+		return
+	}
+	ch := &db.BotChannel{
+		BotID: botID, Username: strings.TrimSpace(r.FormValue("username")),
+		Label: r.FormValue("label"), JoinURL: r.FormValue("join_url"),
+		Mandatory: r.FormValue("mandatory") == "on", Active: r.FormValue("active") != "off",
+	}
+	_ = s.Store.UpsertBotChannel(r.Context(), ch)
+	http.Redirect(w, r, botconfig.RedirectSettings(scope, botID)+"?tab=channels", http.StatusSeeOther)
+}
+
+func (s *Server) postBotChannelDelete(w http.ResponseWriter, r *http.Request) {
+	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	cid, _ := strconv.ParseInt(chi.URLParam(r, "cid"), 10, 64)
+	_, scope, ok := s.requireBotManage(r, botID)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	_ = s.Store.DeleteBotChannel(r.Context(), botID, cid)
+	http.Redirect(w, r, botconfig.RedirectSettings(scope, botID)+"?tab=channels", http.StatusSeeOther)
+}
+
+func (s *Server) postBotUserUnblock(w http.ResponseWriter, r *http.Request) {
+	botID, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	uid, _ := strconv.ParseInt(chi.URLParam(r, "uid"), 10, 64)
+	admin, scope, ok := s.requireBotManage(r, botID)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	_ = s.Store.SetEndUserStatus(r.Context(), botID, uid, "active")
+	s.audit(r, &admin.ID, "unblock_end_user", "end_user", uid, map[string]any{"bot_id": botID})
+	http.Redirect(w, r, fmt.Sprintf("%s/bots/%d/users/%d", scope.Base, botID, uid), http.StatusSeeOther)
 }

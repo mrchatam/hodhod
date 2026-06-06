@@ -1,10 +1,12 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mrchatam/hodhod/internal/db"
@@ -144,8 +146,6 @@ func (s *Server) rejectPayment(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pagePendingPayments(w http.ResponseWriter, r *http.Request) {
 	admin := r.Context().Value(ctxAdmin).(*db.Admin)
-	var payments []db.Payment
-	var history []db.Payment
 	histPage, _ := strconv.Atoi(r.URL.Query().Get("hist_page"))
 	if histPage < 1 {
 		histPage = 1
@@ -154,24 +154,54 @@ func (s *Server) pagePendingPayments(w http.ResponseWriter, r *http.Request) {
 	if v, _ := strconv.Atoi(r.URL.Query().Get("per_page")); validPerPage(v) {
 		histPerPage = v
 	}
-	var histTotal int64
-	if admin.Role == db.RoleMaster {
-		payments, _ = s.Store.ListAllPendingPayments(r.Context())
-		histTotal, _ = s.Store.CountAllPayments(r.Context(), db.PaymentApproved)
-		history, _ = s.Store.ListAllPaymentsPaginated(r.Context(), db.PaymentApproved, histPerPage, (histPage-1)*histPerPage)
+	filter := paymentFilterFromRequest(r)
+	isMaster := admin.Role == db.RoleMaster
+	agentID := int64(0)
+	if admin.AgentID != nil {
+		agentID = *admin.AgentID
 	}
-	if admin.Role == db.RoleAgent && admin.AgentID != nil {
-		payments, _ = s.Store.ListPendingPaymentsByAgent(r.Context(), *admin.AgentID)
-		histTotal, _ = s.Store.CountPaymentsByAgent(r.Context(), *admin.AgentID, db.PaymentApproved)
-		history, _ = s.Store.ListPaymentsByAgentPaginated(r.Context(), *admin.AgentID, db.PaymentApproved, histPerPage, (histPage-1)*histPerPage)
-	}
+	payments, _, _ := s.Store.ListPendingPaymentsFiltered(r.Context(), agentID, isMaster, filter, 0, 0)
+	history, histTotal, _ := s.Store.ListPaymentsHistoryFiltered(r.Context(), agentID, isMaster, filter, histPerPage, (histPage-1)*histPerPage)
 	histPag := Pagination{
 		Page: histPage, PerPage: histPerPage, Total: int(histTotal),
 		Base: r.URL.Path, PageParam: "hist_page",
 	}
+	var bots []db.Bot
+	if isMaster {
+		agents, _ := s.Store.ListAgents(r.Context())
+		for _, a := range agents {
+			list, _ := s.Store.ListBotsByAgent(r.Context(), a.ID)
+			bots = append(bots, list...)
+		}
+	} else if agentID > 0 {
+		bots, _ = s.Store.ListBotsByAgent(r.Context(), agentID)
+	}
 	s.renderPage(w, "payments", r, map[string]any{
 		"Payments": payments, "History": history, "Currency": "Toman", "HistPagination": histPag,
+		"Filter": filter, "Bots": bots,
 	})
+}
+
+func paymentFilterFromRequest(r *http.Request) db.PaymentFilter {
+	f := db.PaymentFilter{}
+	if v, _ := strconv.ParseInt(r.URL.Query().Get("bot_id"), 10, 64); v > 0 {
+		f.BotID = v
+	}
+	if st := r.URL.Query().Get("status"); st != "" {
+		f.Status = db.PaymentStatus(st)
+	}
+	if v := r.URL.Query().Get("date_from"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			f.DateFrom = &t
+		}
+	}
+	if v := r.URL.Query().Get("date_to"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			end := t.Add(24*time.Hour - time.Second)
+			f.DateTo = &end
+		}
+	}
+	return f
 }
 
 func (s *Server) getPaymentReceipt(w http.ResponseWriter, r *http.Request) {
@@ -209,14 +239,23 @@ func (s *Server) notifyPaymentReviewed(r *http.Request, botID, paymentID int64) 
 	if err != nil {
 		return
 	}
-	msg := i18n.T(u.Lang, "topup_pending")
-	if p.Status == db.PaymentApproved {
-		msg = i18n.T(u.Lang, "topup_approved")
-	}
-	if p.Status == db.PaymentRejected {
-		msg = i18n.T(u.Lang, "order_failed")
-	}
+	msg := paymentReviewMessage(r.Context(), s.Store, u.Lang, botID, *p)
 	_ = s.Telegram.SendMessage(r.Context(), botRec.PublicID, u.TelegramID, msg)
+}
+
+func paymentReviewMessage(ctx context.Context, store *db.Store, lang string, botID int64, p db.Payment) string {
+	if p.Status == db.PaymentRejected {
+		return i18n.T(lang, "order_failed")
+	}
+	if p.Status == db.PaymentApproved {
+		if p.OrderID != nil && *p.OrderID > 0 {
+			if svc, err := store.GetServiceByOrderID(ctx, botID, *p.OrderID); err == nil && svc.SubLink != "" {
+				return i18n.T(lang, "service_ready", svc.SubLink)
+			}
+		}
+		return i18n.T(lang, "topup_approved")
+	}
+	return i18n.T(lang, "topup_pending")
 }
 
 func (s *Server) audit(r *http.Request, adminID *int64, action, entityType string, entityID int64, detail map[string]any) {
@@ -227,24 +266,6 @@ func (s *Server) audit(r *http.Request, adminID *int64, action, entityType strin
 		}
 	}
 	_ = s.Store.Audit(r.Context(), adminID, action, entityType, entityID, payload)
-}
-
-func (s *Server) botSettingsMap(r *http.Request, botID int64) map[string]string {
-	keys := []string{"approver_tg_id", "support_contact", "welcome_text", "card_numbers", "warn_percent", "force_join_channel", "currency"}
-	out := make(map[string]string, len(keys))
-	for _, k := range keys {
-		v, _ := s.Store.GetSetting(r.Context(), "bot", botID, k)
-		out[k] = v
-	}
-	return out
-}
-
-func (s *Server) saveBotSettings(r *http.Request, botID int64) {
-	for _, k := range []string{"approver_tg_id", "support_contact", "welcome_text", "card_numbers", "warn_percent", "force_join_channel", "currency"} {
-		if v := r.FormValue(k); v != "" || r.Form.Has(k) {
-			_ = s.Store.SetSetting(r.Context(), "bot", botID, k, r.FormValue(k))
-		}
-	}
 }
 
 func (s *Server) postBotWithToken(r *http.Request, agentID int64) error {

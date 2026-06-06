@@ -158,3 +158,106 @@ func (s *Store) IncrementCardRRIndex(ctx context.Context, botID int64) error {
 }
 
 var ErrBotHasActiveServices = errors.New("bot has active services")
+
+// PaymentFilter holds optional payment queue filters.
+type PaymentFilter struct {
+	BotID    int64
+	Status   PaymentStatus
+	DateFrom *time.Time
+	DateTo   *time.Time
+}
+
+func (s *Store) enrichPaymentRows(ctx context.Context, payments []Payment) ([]PaymentListRow, error) {
+	out := make([]PaymentListRow, 0, len(payments))
+	for _, p := range payments {
+		row := PaymentListRow{Payment: p, OrderType: "topup"}
+		if p.OrderID != nil && *p.OrderID > 0 {
+			row.OrderType = "plan"
+		}
+		if bot, err := s.GetBot(ctx, p.BotID); err == nil {
+			row.BotUsername = bot.Username
+		}
+		if u, err := s.GetEndUser(ctx, p.BotID, p.EndUserID); err == nil {
+			row.EndUserTGID = u.TelegramID
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func (s *Store) applyPaymentFilters(q *gorm.DB, f PaymentFilter) *gorm.DB {
+	if f.BotID > 0 {
+		q = q.Where("payments.bot_id = ?", f.BotID)
+	}
+	if f.Status != "" {
+		q = q.Where("payments.status = ?", f.Status)
+	}
+	if f.DateFrom != nil {
+		q = q.Where("payments.created_at >= ?", *f.DateFrom)
+	}
+	if f.DateTo != nil {
+		q = q.Where("payments.created_at <= ?", *f.DateTo)
+	}
+	return q
+}
+
+func (s *Store) ListPendingPaymentsFiltered(ctx context.Context, agentID int64, isMaster bool, f PaymentFilter, limit, offset int) ([]PaymentListRow, int64, error) {
+	q := s.DB.WithContext(ctx).Model(&Payment{}).Where("payments.status = ?", PaymentPending)
+	if !isMaster && agentID > 0 {
+		q = q.Joins("JOIN bots ON bots.id = payments.bot_id").Where("bots.agent_id = ?", agentID)
+	}
+	q = s.applyPaymentFilters(q, f)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var payments []Payment
+	listQ := s.DB.WithContext(ctx).Model(&Payment{}).Where("payments.status = ?", PaymentPending)
+	if !isMaster && agentID > 0 {
+		listQ = listQ.Joins("JOIN bots ON bots.id = payments.bot_id").Where("bots.agent_id = ?", agentID)
+	}
+	listQ = s.applyPaymentFilters(listQ, f).Order("payments.id DESC")
+	if limit > 0 {
+		listQ = listQ.Limit(limit).Offset(offset)
+	}
+	if err := listQ.Find(&payments).Error; err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.enrichPaymentRows(ctx, payments)
+	return rows, total, err
+}
+
+func (s *Store) ListPaymentsHistoryFiltered(ctx context.Context, agentID int64, isMaster bool, f PaymentFilter, limit, offset int) ([]PaymentListRow, int64, error) {
+	status := f.Status
+	if status == "" {
+		status = PaymentApproved
+	}
+	q := s.DB.WithContext(ctx).Model(&Payment{}).Where("payments.status = ?", status)
+	if !isMaster && agentID > 0 {
+		q = q.Joins("JOIN bots ON bots.id = payments.bot_id").Where("bots.agent_id = ?", agentID)
+	}
+	q = s.applyPaymentFilters(q, f)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var payments []Payment
+	listQ := s.DB.WithContext(ctx).Model(&Payment{}).Where("payments.status = ?", status)
+	if !isMaster && agentID > 0 {
+		listQ = listQ.Joins("JOIN bots ON bots.id = payments.bot_id").Where("bots.agent_id = ?", agentID)
+	}
+	listQ = s.applyPaymentFilters(listQ, f).Order("payments.id DESC")
+	if limit > 0 {
+		listQ = listQ.Limit(limit).Offset(offset)
+	}
+	if err := listQ.Find(&payments).Error; err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.enrichPaymentRows(ctx, payments)
+	return rows, total, err
+}
+
+func (s *Store) UpdateServiceExpiryWarned(ctx context.Context, serviceID int64, warnedAt time.Time) error {
+	return s.DB.WithContext(ctx).Model(&Service{}).Where("id = ?", serviceID).
+		Update("last_expiry_warned_at", warnedAt).Error
+}

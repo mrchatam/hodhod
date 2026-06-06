@@ -151,7 +151,6 @@ var adminFA = map[string]string{
 	"bots.settings":              "تنظیمات",
 	"bots.empty":                 "هنوز رباتی وجود ندارد.",
 	"bot_settings.title":         "تنظیمات ربات",
-	"agent_bots.title":           "ربات‌های من",
 	"agent_plans.title":          "پلن‌ها",
 	"agent_plans.add":            "افزودن پلن",
 	"agent_plans.empty":          "هنوز پلنی وجود ندارد.",

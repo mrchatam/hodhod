@@ -3,6 +3,8 @@ package billing
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"gorm.io/gorm"
@@ -84,10 +86,40 @@ func (s *PaymentReviewService) approvePlanPayment(ctx context.Context, botID, pa
 	}
 	svc, err := s.Prov.ProvisionOrder(ctx, botID, order)
 	if err != nil {
-		return nil, err
+		slog.Error("plan provision failed after approve",
+			"bot_id", botID, "payment_id", paymentID, "order_id", orderID, "err", err)
+		if compErr := s.compensateApprovedPlanPayment(ctx, botID, paymentID, orderID, reviewerID); compErr != nil {
+			slog.Error("compensating reject failed",
+				"bot_id", botID, "payment_id", paymentID, "order_id", orderID, "err", compErr)
+		}
+		return nil, fmt.Errorf("provision failed: %w", err)
 	}
 	_ = s.Orders.MarkOrderProvisioned(ctx, botID, order.ID)
 	return &ApproveResult{Provisioned: true, Service: svc}, nil
+}
+
+func (s *PaymentReviewService) compensateApprovedPlanPayment(ctx context.Context, botID, paymentID, orderID, reviewerID int64) error {
+	return s.Store.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var p db.Payment
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("bot_id = ? AND id = ?", botID, paymentID).First(&p).Error; err != nil {
+			return err
+		}
+		now := time.Now()
+		p.Status = db.PaymentRejected
+		p.ReviewedBy = &reviewerID
+		p.ReviewedAt = &now
+		if err := tx.Save(&p).Error; err != nil {
+			return err
+		}
+		var o db.Order
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("bot_id = ? AND id = ?", botID, orderID).First(&o).Error; err != nil {
+			return err
+		}
+		o.Status = db.OrderRejected
+		return tx.Save(&o).Error
+	})
 }
 
 // RejectPayment rejects a pending payment and linked order if any.

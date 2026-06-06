@@ -151,7 +151,6 @@ var adminEN = map[string]string{
 	"bots.settings":              "Settings",
 	"bots.empty":                 "No bots yet.",
 	"bot_settings.title":         "Bot settings",
-	"agent_bots.title":           "My bots",
 	"agent_plans.title":          "Plans",
 	"agent_plans.add":            "Add plan",
 	"agent_plans.empty":          "No plans yet.",

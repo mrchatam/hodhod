@@ -35,7 +35,7 @@ Deploy modes (DEPLOY_MODE):
 Non-interactive env vars:
   PUBLIC_BASE_URL       your.domain or https://your.domain
   MASTER_USERNAME       default: admin
-  MASTER_PASSWORD       required
+  ADMIN_PASSWORD        optional (bootstrap-admin; required in non-interactive mode)
   OUTBOUND_SOCKS_PROXY  optional
   DB_PASSWORD           auto-generated if empty
   HTTP_PORT             default: 8080
@@ -348,7 +348,7 @@ prompt_secret() {
   while true; do
     if $NON_INTERACTIVE; then
       printf -v "$var" '%s' "${!var:-}"
-      [[ -n "${!var}" ]] || { ui_err "MASTER_PASSWORD required in non-interactive mode."; exit 1; }
+      [[ -n "${!var}" ]] || { ui_err "ADMIN_PASSWORD required in non-interactive mode."; exit 1; }
       return 0
     fi
     echo -n "  ${UI_BOLD}${label}${UI_RESET}: "
@@ -457,7 +457,7 @@ OUTBOUND_SOCKS_PROXY=${OUTBOUND_SOCKS_PROXY}
 SESSION_SECRET=${SESSION_SECRET}
 LOG_LEVEL=info
 MASTER_USERNAME=${MASTER_USERNAME}
-MASTER_PASSWORD=${MASTER_PASSWORD}
+# Admin is created via bootstrap-admin after first start (not MASTER_PASSWORD env).
 PANEL_POLL_WORKERS=4
 HODHOD_IMAGE=${HODHOD_IMAGE}
   HODHOD_HOST_NETWORK=${HODHOD_HOST_NETWORK:-0}
@@ -596,6 +596,24 @@ handle_image_unavailable() {
       *) ui_err "Pick 1, 2, or 3." ;;
     esac
   done
+}
+
+bootstrap_admin() {
+  [[ -n "${ADMIN_PASSWORD:-}" ]] || { ui_hint "ADMIN_PASSWORD not set — skip bootstrap-admin."; return 0; }
+  ui_hint "Creating master admin (${MASTER_USERNAME}) via bootstrap-admin..."
+  if [[ "$DEPLOY_MODE" == "native" ]]; then
+    (cd "$ROOT" && set -a && source "$ENV_FILE" && set +a && "$ROOT/bin/hodhod" bootstrap-admin --username "${MASTER_USERNAME}" --password "${ADMIN_PASSWORD}") && {
+      ui_ok "bootstrap-admin complete."
+      return 0
+    }
+    return 1
+  fi
+  compose_app_files
+  (cd "$ROOT" && docker compose "${COMPOSE_APP_FILES[@]}" exec -T hodhod-app bootstrap-admin --username "${MASTER_USERNAME}" --password "${ADMIN_PASSWORD}") && {
+    ui_ok "bootstrap-admin complete."
+    return 0
+  }
+  return 1
 }
 
 wait_health() {
@@ -857,7 +875,7 @@ do_install() {
 
   PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-}"
   MASTER_USERNAME="${MASTER_USERNAME:-admin}"
-  MASTER_PASSWORD="${MASTER_PASSWORD:-}"
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
   OUTBOUND_SOCKS_PROXY="${OUTBOUND_SOCKS_PROXY:-}"
   DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -hex 16)}"
   HTTP_PORT="${HTTP_PORT:-8080}"
@@ -870,7 +888,7 @@ do_install() {
   ui_step 2 4 "Configuration"
   prompt_url        PUBLIC_BASE_URL "Public URL (domain or https://domain)"
   prompt_loop       MASTER_USERNAME "Master username" "$MASTER_USERNAME"
-  prompt_secret     MASTER_PASSWORD "Master password"
+  prompt_secret     ADMIN_PASSWORD "Admin password (bootstrap-admin)"
   prompt_proxy      OUTBOUND_SOCKS_PROXY "SOCKS proxy (optional, empty to skip)" ""
   prompt_port       HTTP_PORT "Local app port" "$HTTP_PORT"
 
@@ -883,6 +901,7 @@ do_install() {
   configure_docker_registry_mirrors
   start_stack
   wait_health || true
+  bootstrap_admin || ui_warn "bootstrap-admin failed — run manually: hodhod bootstrap-admin --username ${MASTER_USERNAME} --password <password>"
 
   DOMAIN="$(domain_from_url "$PUBLIC_BASE_URL")"
   local setup_nginx_ans=""

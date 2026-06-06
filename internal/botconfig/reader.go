@@ -126,6 +126,7 @@ func (r *Reader) SettingsMap(ctx context.Context, botID int64) map[string]string
 		"approver_tg_id", "support_contact", "welcome_text", "welcome_text_fa", "welcome_text_en",
 		"help_text_fa", "help_text_en", "card_numbers", "warn_percent", "force_join_channel", "currency",
 		"topup_min_toman", "topup_max_toman", "trial_enabled", "trial_duration_hours", "trial_volume_gb", "trial_max_per_user",
+		"expiry_warn_days", "notify_receipt_pending", "notify_purchase", "notify_new_user", "notify_webhook_error",
 	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {

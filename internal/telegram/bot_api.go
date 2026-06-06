@@ -218,42 +218,49 @@ func approverID(ctx context.Context, store *db.Store, botID int64) (int64, bool)
 	return id, true
 }
 
-// checkForceJoin returns true if the user must join a channel before continuing.
+// checkForceJoin returns true if the user must join mandatory channels before continuing.
 func (h *Handlers) checkForceJoin(ctx context.Context, mb *managedBot, user *db.EndUser, chatID int64) (bool, error) {
-	channel, _ := h.mgr.store.GetSetting(ctx, "bot", mb.record.ID, "force_join_channel")
-	channel = strings.TrimSpace(channel)
-	if channel == "" {
+	if h.mgr.reader == nil {
 		return false, nil
 	}
-	member, err := mb.api.GetChatMember(ctx, &bot.GetChatMemberParams{
-		ChatID: channel,
-		UserID: user.TelegramID,
+	channels, err := h.mgr.reader.ActiveChannels(ctx, mb.record.ID)
+	if err != nil || len(channels) == 0 {
+		return false, nil
+	}
+	var missing []db.BotChannel
+	for _, ch := range channels {
+		if !ch.Mandatory || !ch.Active {
+			continue
+		}
+		member, err := mb.api.GetChatMember(ctx, &bot.GetChatMemberParams{
+			ChatID: ch.Username,
+			UserID: user.TelegramID,
+		})
+		if err != nil || member.Type == models.ChatMemberTypeLeft || member.Type == models.ChatMemberTypeBanned {
+			missing = append(missing, ch)
+		}
+	}
+	if len(missing) == 0 {
+		return false, nil
+	}
+	text := i18n.T(user.Lang, "force_join_required", missing[0].LabelOrUsername())
+	var rows [][]models.InlineKeyboardButton
+	for _, ch := range missing {
+		label := ch.LabelOrUsername()
+		joinURL := ch.JoinURL
+		if joinURL == "" {
+			joinURL = channelJoinURL(ch.Username)
+		}
+		if joinURL != "" {
+			rows = append(rows, []models.InlineKeyboardButton{{Text: label, URL: joinURL}})
+		}
+	}
+	rows = append(rows, []models.InlineKeyboardButton{
+		{Text: i18n.T(user.Lang, "btn_confirm_join"), CallbackData: "force_join_confirm"},
 	})
-	if err != nil {
-		text := i18n.T(user.Lang, "force_join_required", channel)
-		joinURL := channelJoinURL(channel)
-		var kb *models.InlineKeyboardMarkup
-		if joinURL != "" {
-			kb = &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{
-				{{Text: channel, URL: joinURL}},
-			}}
-		}
-		_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text, ReplyMarkup: kb})
-		return true, nil
-	}
-	if member.Type == models.ChatMemberTypeLeft || member.Type == models.ChatMemberTypeBanned {
-		text := i18n.T(user.Lang, "force_join_required", channel)
-		joinURL := channelJoinURL(channel)
-		var kb *models.InlineKeyboardMarkup
-		if joinURL != "" {
-			kb = &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{
-				{{Text: channel, URL: joinURL}},
-			}}
-		}
-		_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text, ReplyMarkup: kb})
-		return true, nil
-	}
-	return false, nil
+	kb := &models.InlineKeyboardMarkup{InlineKeyboard: rows}
+	_, _ = mb.api.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: text, ReplyMarkup: kb})
+	return true, nil
 }
 
 func channelJoinURL(channel string) string {

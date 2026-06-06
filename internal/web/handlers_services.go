@@ -22,21 +22,22 @@ func (s *Server) pageServices(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	panelID, _ := strconv.ParseInt(r.URL.Query().Get("panel_id"), 10, 64)
-	pag := paginationFromRequest(r, 0, "q", "status", "panel_id")
+	endUserID, _ := strconv.ParseInt(r.URL.Query().Get("end_user_id"), 10, 64)
+	pag := paginationFromRequest(r, 0, "q", "status", "panel_id", "end_user_id")
 	var total int64
 	var svcs []db.Service
 	var err error
 	if admin.Role == db.RoleMaster {
-		total, err = s.Store.CountAllServicesFiltered(r.Context(), q, status, panelID)
+		total, err = s.Store.CountAllServicesFiltered(r.Context(), q, status, panelID, endUserID)
 		if err == nil {
 			pag.Total = int(total)
-			svcs, err = s.Store.ListAllServicesFilteredForPanel(r.Context(), q, status, panelID, pag.PerPage, pag.Offset())
+			svcs, err = s.Store.ListAllServicesFilteredForPanel(r.Context(), q, status, panelID, endUserID, pag.PerPage, pag.Offset())
 		}
 	} else if admin.AgentID != nil {
-		total, err = s.Store.CountServicesByAgentFiltered(r.Context(), *admin.AgentID, q, status, panelID)
+		total, err = s.Store.CountServicesByAgentFiltered(r.Context(), *admin.AgentID, q, status, panelID, endUserID)
 		if err == nil {
 			pag.Total = int(total)
-			svcs, err = s.Store.ListServicesByAgentFilteredForPanel(r.Context(), *admin.AgentID, q, status, panelID, pag.PerPage, pag.Offset())
+			svcs, err = s.Store.ListServicesByAgentFilteredForPanel(r.Context(), *admin.AgentID, q, status, panelID, endUserID, pag.PerPage, pag.Offset())
 		}
 	}
 	if err != nil {
@@ -45,7 +46,7 @@ func (s *Server) pageServices(w http.ResponseWriter, r *http.Request) {
 	}
 	s.renderPage(w, "services", r, map[string]any{
 		"Services": svcs, "Query": q, "StatusFilter": status,
-		"PanelID": panelID, "Pagination": pag,
+		"PanelID": panelID, "EndUserID": endUserID, "Pagination": pag,
 	})
 }
 

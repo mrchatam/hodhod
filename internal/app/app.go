@@ -99,7 +99,7 @@ func Run() error {
 		return err
 	}
 
-	mini := &miniapp.API{Store: store, Box: box, Orders: orders, Wallet: wallet, Prov: prov}
+	mini := &miniapp.API{Store: store, Box: box, Orders: orders, Wallet: wallet, Prov: prov, Reader: botReader}
 
 	sched := scheduler.New(store, panelReg, tgMgr, backupSvc, cfg.PanelPollWorkers)
 	sched.Start(cfg.CronUsagePoll, cfg.CronExpiryCheck, cfg.CronBackup)

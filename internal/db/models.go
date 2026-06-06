@@ -384,6 +384,21 @@ type BotChannel struct {
 	Active    bool   `gorm:"not null;default:true"`
 }
 
+func (c BotChannel) LabelOrUsername() string {
+	if c.Label != "" {
+		return c.Label
+	}
+	return c.Username
+}
+
+// PaymentListRow enriches payment queue rows for the admin panel.
+type PaymentListRow struct {
+	Payment
+	BotUsername string
+	EndUserTGID int64
+	OrderType   string
+}
+
 type BotMenuButton struct {
 	ID        int64  `gorm:"primaryKey"`
 	BotID     int64  `gorm:"not null;index"`

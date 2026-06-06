@@ -143,12 +143,36 @@ func (r *Runner) checkExpiry(ctx context.Context) {
 				_ = r.Telegram.SendMessage(ctx, bot.PublicID, user.TelegramID, text)
 				svc.Status = "expired"
 				_ = r.Store.UpdateServiceByID(ctx, &svc)
-			} else if svc.ExpireAt.Before(now.Add(48 * time.Hour)) {
+			} else if r.shouldSendExpiryWarn(ctx, bot.ID, &svc, now) {
 				text := i18n.T(user.Lang, "service_expiring")
 				_ = r.Telegram.SendMessage(ctx, bot.PublicID, user.TelegramID, text)
+				_ = r.Store.UpdateServiceExpiryWarned(ctx, svc.ID, now)
 			}
 		}
 	}
+}
+
+func (r *Runner) shouldSendExpiryWarn(ctx context.Context, botID int64, svc *db.Service, now time.Time) bool {
+	if svc.ExpireAt == nil {
+		return false
+	}
+	leadDays := 2
+	if v, _ := r.Store.GetSetting(ctx, "bot", botID, "expiry_warn_days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			leadDays = n
+		}
+	}
+	warnBefore := now.Add(time.Duration(leadDays) * 24 * time.Hour)
+	if !svc.ExpireAt.Before(warnBefore) || svc.ExpireAt.Before(now) {
+		return false
+	}
+	if svc.LastExpiryWarnedAt != nil {
+		interval := time.Duration(leadDays) * 24 * time.Hour
+		if now.Sub(*svc.LastExpiryWarnedAt) < interval {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Runner) runBackups(ctx context.Context) {

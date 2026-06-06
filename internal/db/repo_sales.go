@@ -125,20 +125,20 @@ func (s *Store) ListAllServicesFiltered(ctx context.Context, q, status string) (
 	return s.ListAllServicesFilteredPaginated(ctx, q, status, 0, 0)
 }
 
-func (s *Store) CountAllServicesFiltered(ctx context.Context, q, status string, panelID int64) (int64, error) {
+func (s *Store) CountAllServicesFiltered(ctx context.Context, q, status string, panelID, endUserID int64) (int64, error) {
 	var n int64
 	query := s.DB.WithContext(ctx).Model(&Service{})
-	query = applyServiceFilters(query, q, status)
+	query = applyServiceFilters(query, q, status, endUserID)
 	if panelID > 0 {
 		query = query.Where("panel_id = ?", panelID)
 	}
 	return n, query.Count(&n).Error
 }
 
-func (s *Store) CountServicesByAgentFiltered(ctx context.Context, agentID int64, q, status string, panelID int64) (int64, error) {
+func (s *Store) CountServicesByAgentFiltered(ctx context.Context, agentID int64, q, status string, panelID, endUserID int64) (int64, error) {
 	var n int64
 	query := s.DB.WithContext(ctx).Model(&Service{}).Where("agent_id = ?", agentID)
-	query = applyServiceFilters(query, q, status)
+	query = applyServiceFilters(query, q, status, endUserID)
 	if panelID > 0 {
 		query = query.Where("panel_id = ?", panelID)
 	}
@@ -148,7 +148,7 @@ func (s *Store) CountServicesByAgentFiltered(ctx context.Context, agentID int64,
 func (s *Store) ListAllServicesFilteredPaginated(ctx context.Context, q, status string, limit, offset int) ([]Service, error) {
 	var out []Service
 	query := s.DB.WithContext(ctx).Model(&Service{})
-	query = applyServiceFilters(query, q, status)
+	query = applyServiceFilters(query, q, status, 0)
 	query = query.Order("id DESC")
 	if limit > 0 {
 		query = query.Limit(limit).Offset(offset)
@@ -159,7 +159,7 @@ func (s *Store) ListAllServicesFilteredPaginated(ctx context.Context, q, status 
 func (s *Store) ListServicesByAgentFilteredPaginated(ctx context.Context, agentID int64, q, status string, limit, offset int) ([]Service, error) {
 	var out []Service
 	query := s.DB.WithContext(ctx).Where("agent_id = ?", agentID)
-	query = applyServiceFilters(query, q, status)
+	query = applyServiceFilters(query, q, status, 0)
 	query = query.Order("id DESC")
 	if limit > 0 {
 		query = query.Limit(limit).Offset(offset)
@@ -167,10 +167,10 @@ func (s *Store) ListServicesByAgentFilteredPaginated(ctx context.Context, agentI
 	return out, query.Find(&out).Error
 }
 
-func (s *Store) ListAllServicesFilteredForPanel(ctx context.Context, q, status string, panelID int64, limit, offset int) ([]Service, error) {
+func (s *Store) ListAllServicesFilteredForPanel(ctx context.Context, q, status string, panelID, endUserID int64, limit, offset int) ([]Service, error) {
 	var out []Service
 	query := s.DB.WithContext(ctx).Model(&Service{})
-	query = applyServiceFilters(query, q, status)
+	query = applyServiceFilters(query, q, status, endUserID)
 	if panelID > 0 {
 		query = query.Where("panel_id = ?", panelID)
 	}
@@ -181,10 +181,10 @@ func (s *Store) ListAllServicesFilteredForPanel(ctx context.Context, q, status s
 	return out, query.Find(&out).Error
 }
 
-func (s *Store) ListServicesByAgentFilteredForPanel(ctx context.Context, agentID int64, q, status string, panelID int64, limit, offset int) ([]Service, error) {
+func (s *Store) ListServicesByAgentFilteredForPanel(ctx context.Context, agentID int64, q, status string, panelID, endUserID int64, limit, offset int) ([]Service, error) {
 	var out []Service
 	query := s.DB.WithContext(ctx).Where("agent_id = ?", agentID)
-	query = applyServiceFilters(query, q, status)
+	query = applyServiceFilters(query, q, status, endUserID)
 	if panelID > 0 {
 		query = query.Where("panel_id = ?", panelID)
 	}
@@ -195,13 +195,16 @@ func (s *Store) ListServicesByAgentFilteredForPanel(ctx context.Context, agentID
 	return out, query.Find(&out).Error
 }
 
-func applyServiceFilters(q *gorm.DB, search, status string) *gorm.DB {
+func applyServiceFilters(q *gorm.DB, search, status string, endUserID int64) *gorm.DB {
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
 	if search != "" {
 		like := "%" + search + "%"
 		q = q.Where("label ILIKE ? OR panel_username ILIKE ?", like, like)
+	}
+	if endUserID > 0 {
+		q = q.Where("end_user_id = ?", endUserID)
 	}
 	return q
 }

@@ -93,7 +93,7 @@ Non-interactive install (CI / automation):
 
 ```bash
 export PUBLIC_BASE_URL=your.domain          # https:// added automatically
-export MASTER_PASSWORD='your-secure-password'
+export ADMIN_PASSWORD='your-secure-password'   # used by install.sh → bootstrap-admin
 export DEPLOY_MODE=docker                   # docker | build | native
 export SETUP_NGINX=1
 export CERTBOT_EMAIL=you@example.com
@@ -204,7 +204,8 @@ docker compose logs -f hodhod-app
 
 ```bash
 cp .env.example .env
-# Edit .env (APP_ENCRYPTION_KEY, PUBLIC_BASE_URL, MASTER_PASSWORD, etc.)
+# Edit .env (APP_ENCRYPTION_KEY, PUBLIC_BASE_URL, etc.)
+# Create admin: hodhod bootstrap-admin --username admin --password '...'
 docker compose up -d --build
 # Then configure Nginx manually (see above) or: bash install.sh → option 7
 ```

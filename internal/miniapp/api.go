@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/mrchatam/hodhod/internal/billing"
+	"github.com/mrchatam/hodhod/internal/botconfig"
 	"github.com/mrchatam/hodhod/internal/crypto"
 	"github.com/mrchatam/hodhod/internal/db"
 	"github.com/mrchatam/hodhod/internal/provisioning"
@@ -20,6 +21,7 @@ type API struct {
 	Orders *billing.OrderService
 	Wallet *billing.WalletService
 	Prov   *provisioning.Service
+	Reader *botconfig.Reader
 }
 
 // Routes mounts miniapp routes on r.
@@ -217,7 +219,19 @@ func (a *API) createTrial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if user.TrialUsedAt != nil {
+	if a.Reader != nil && a.Reader.Setting(r.Context(), botID, "trial_enabled") != "true" {
+		http.Error(w, "trial disabled", http.StatusForbidden)
+		return
+	}
+	if user.Status == "blocked" {
+		http.Error(w, "user blocked", http.StatusForbidden)
+		return
+	}
+	maxPerUser := int64(1)
+	if a.Reader != nil {
+		maxPerUser = botconfig.ParseInt64(a.Reader.Setting(r.Context(), botID, "trial_max_per_user"), 1)
+	}
+	if user.TrialCount >= int(maxPerUser) || user.TrialUsedAt != nil {
 		http.Error(w, "trial already used", http.StatusConflict)
 		return
 	}
@@ -248,7 +262,7 @@ func (a *API) createTrial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "provisioning failed", http.StatusBadGateway)
 		return
 	}
-	now := time.Now()
+	now = time.Now()
 	user.TrialUsedAt = &now
 	user.TrialCount++
 	_ = a.Store.UpdateEndUser(r.Context(), botID, user)

@@ -3,6 +3,7 @@
   <div>
     <h2 class="text-2xl font-bold">@{{.Bot.Username}}</h2>
     <p class="text-sm opacity-60 mt-1">{{T .Lang "bot_settings.webhook"}}: {{.WebhookURL}} · {{.WebhookStatus}}</p>
+    {{if .Bot.WebhookLastError}}<p class="text-sm text-red-500">{{.Bot.WebhookLastError}}</p>{{end}}
     {{if .AgentPublicURL}}<p class="text-sm opacity-60">{{T .Lang "bot_settings.miniapp"}}: {{.AgentPublicURL}}/miniapp/index.html?bot={{.Bot.PublicID}}</p>{{end}}
   </div>
   <a href="{{.Scope.Base}}/bots" class="btn btn-muted btn-sm">{{T .Lang "common.back"}}</a>
@@ -12,6 +13,8 @@
   {{$base := printf "%s/bots/%d/settings" .Scope.Base .Bot.ID}}
   <a href="{{$base}}?tab=general" class="btn btn-sm {{if eq .Tab "general"}}btn-primary{{else}}btn-muted{{end}}">{{T .Lang "bot_settings.tab_general"}}</a>
   <a href="{{$base}}?tab=messages" class="btn btn-sm {{if eq .Tab "messages"}}btn-primary{{else}}btn-muted{{end}}">{{T .Lang "bot_settings.tab_messages"}}</a>
+  <a href="{{$base}}?tab=menu" class="btn btn-sm {{if eq .Tab "menu"}}btn-primary{{else}}btn-muted{{end}}">Menu</a>
+  <a href="{{$base}}?tab=channels" class="btn btn-sm {{if eq .Tab "channels"}}btn-primary{{else}}btn-muted{{end}}">{{T .Lang "bot_settings.tab_channels"}}</a>
   <a href="{{$base}}?tab=cards" class="btn btn-sm {{if eq .Tab "cards"}}btn-primary{{else}}btn-muted{{end}}">{{T .Lang "bot_settings.tab_cards"}}</a>
   <a href="{{$base}}?tab=notify" class="btn btn-sm {{if eq .Tab "notify"}}btn-primary{{else}}btn-muted{{end}}">{{T .Lang "bot_settings.tab_notify"}}</a>
   {{if .Caps.ShowPanelsTab}}<a href="{{$base}}?tab=panels" class="btn btn-sm {{if eq .Tab "panels"}}btn-primary{{else}}btn-muted{{end}}">{{T .Lang "bot_settings.tab_panels"}}</a>{{end}}
@@ -38,6 +41,8 @@
       <option value="fixed_order" {{if eq .Bot.CardDisplayMode "fixed_order"}}selected{{end}}>fixed_order</option>
     </select>
   </label>
+  <label class="form-field"><span class="form-label">Trial enabled</span><input type="checkbox" name="trial_enabled" value="true" {{if eq (index .Settings "trial_enabled") "true"}}checked{{end}}></label>
+  <label class="form-field"><span class="form-label">Trial max per user</span><input name="trial_max_per_user" value="{{index .Settings "trial_max_per_user"}}" class="form-input"></label>
   <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
 {{end}}
@@ -47,15 +52,60 @@
   <input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="tab" value="messages">
   <label class="form-field"><span class="form-label">Welcome (FA)</span><textarea name="welcome_text_fa" class="form-textarea" rows="2">{{index .Settings "welcome_text_fa"}}</textarea></label>
   <label class="form-field"><span class="form-label">Welcome (EN)</span><textarea name="welcome_text_en" class="form-textarea" rows="2">{{index .Settings "welcome_text_en"}}</textarea></label>
+  <label class="form-field"><span class="form-label">Help (FA)</span><textarea name="help_text_fa" class="form-textarea" rows="2">{{index .Settings "help_text_fa"}}</textarea></label>
+  <label class="form-field"><span class="form-label">Help (EN)</span><textarea name="help_text_en" class="form-textarea" rows="2">{{index .Settings "help_text_en"}}</textarea></label>
   <label class="form-field"><span class="form-label">{{T .Lang "bot_settings.support_contact"}}</span><input name="support_contact" value="{{index .Settings "support_contact"}}" class="form-input"></label>
   <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
 {{end}}
 
+{{if eq .Tab "menu"}}
+<form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="tab" value="menu">
+  {{range .MenuButtons}}
+  <label class="flex items-center gap-2 text-sm">
+    <input type="checkbox" name="menu_{{.ButtonKey}}" {{if .Enabled}}checked{{end}}>
+    <span>{{.ButtonKey}}</span>
+  </label>
+  {{end}}
+  <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
+</form>
+{{end}}
+
+{{if eq .Tab "channels"}}
+<div class="space-y-4 max-w-2xl">
+  <ul class="space-y-2">{{range .Channels}}<li class="card p-3 flex justify-between items-center text-sm">
+    <span>{{.LabelOrUsername}} — {{.Username}} {{if .Mandatory}}(mandatory){{end}}</span>
+    <form method="post" action="{{$.Scope.Base}}/bots/{{$.Bot.ID}}/channels/{{.ID}}/delete"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-link btn-link-danger btn-sm">{{T $.Lang "common.delete"}}</button></form>
+  </li>{{else}}<li class="opacity-60">{{T .Lang "empty.default"}}</li>{{end}}</ul>
+  <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/channels" class="card p-6 space-y-4">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label class="form-field"><span class="form-label">Username</span><input name="username" class="form-input" placeholder="@channel" required></label>
+    <label class="form-field"><span class="form-label">Label</span><input name="label" class="form-input"></label>
+    <label class="form-field"><span class="form-label">Join URL</span><input name="join_url" class="form-input" placeholder="https://t.me/..."></label>
+    <label class="flex items-center gap-2"><input type="checkbox" name="mandatory" checked> Mandatory</label>
+    <label class="flex items-center gap-2"><input type="checkbox" name="active" checked> Active</label>
+    <button type="submit" class="btn btn-primary">{{T .Lang "common.add"}}</button>
+  </form>
+</div>
+{{end}}
+
 {{if eq .Tab "cards"}}
 <div class="space-y-4 max-w-2xl">
-  <ul class="space-y-2">{{range .Cards}}<li class="card p-3 flex justify-between items-center text-sm"><span>{{.Label}} — {{.CardNumber}}</span>
-    <form method="post" action="{{$.Scope.Base}}/bots/{{$.Bot.ID}}/cards/{{.ID}}/delete"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-link btn-link-danger btn-sm">{{T $.Lang "common.delete"}}</button></form></li>{{else}}<li class="opacity-60">{{T .Lang "empty.default"}}</li>{{end}}</ul>
+  {{range .Cards}}<form method="post" action="{{$.Scope.Base}}/bots/{{$.Bot.ID}}/cards/{{.ID}}" class="card p-4 space-y-3">
+    <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <label class="form-field"><span class="form-label">Label</span><input name="label" value="{{.Label}}" class="form-input"></label>
+      <label class="form-field"><span class="form-label">Card number</span><input name="card_number" value="{{.CardNumber}}" class="form-input"></label>
+      <label class="form-field"><span class="form-label">Holder</span><input name="holder_name" value="{{.HolderName}}" class="form-input"></label>
+      <label class="form-field"><span class="form-label">Weight</span><input name="weight" value="{{.Weight}}" class="form-input" type="number"></label>
+    </div>
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="active" {{if .Active}}checked{{end}}> Active</label>
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary btn-sm">{{T $.Lang "common.save"}}</button>
+      <button type="submit" formaction="{{$.Scope.Base}}/bots/{{$.Bot.ID}}/cards/{{.ID}}/delete" class="btn btn-secondary btn-sm">{{T $.Lang "common.delete"}}</button>
+    </div>
+  </form>{{else}}<p class="opacity-60">{{T .Lang "empty.default"}}</p>{{end}}
   <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/cards" class="card p-6 space-y-4">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
     <label class="form-field"><span class="form-label">Label</span><input name="label" class="form-input"></label>
@@ -70,6 +120,11 @@
 <form method="post" action="{{.Scope.Base}}/bots/{{.Bot.ID}}/settings" class="card p-6 space-y-4 max-w-lg">
   <input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="tab" value="notify">
   <label class="form-field"><span class="form-label">{{T .Lang "bots.approver_id"}}</span><input name="approver_tg_id" value="{{index .Settings "approver_tg_id"}}" class="form-input" placeholder="123,456"></label>
+  <label class="form-field"><span class="form-label">Expiry warn lead (days)</span><input name="expiry_warn_days" value="{{index .Settings "expiry_warn_days"}}" class="form-input" placeholder="2"></label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_receipt_pending" value="true" {{if eq (index .Settings "notify_receipt_pending") "true"}}checked{{end}}> Notify receipt pending</label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_purchase" value="true" {{if eq (index .Settings "notify_purchase") "true"}}checked{{end}}> Notify purchase</label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_new_user" value="true" {{if eq (index .Settings "notify_new_user") "true"}}checked{{end}}> Notify new user</label>
+  <label class="flex items-center gap-2"><input type="checkbox" name="notify_webhook_error" value="true" {{if eq (index .Settings "notify_webhook_error") "true"}}checked{{end}}> Notify webhook errors</label>
   <button type="submit" class="btn btn-primary">{{T .Lang "common.save"}}</button>
 </form>
 {{end}}

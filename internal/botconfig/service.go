@@ -2,6 +2,7 @@ package botconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/mrchatam/hodhod/internal/db"
@@ -51,6 +52,8 @@ func (s *BotService) ListForScope(ctx context.Context, scope Scope, agents []db.
 	return out, nil
 }
 
+var ErrBotHasPendingPayments = errors.New("bot has pending payments")
+
 // Delete soft-deletes a bot after checks; caller must teardown webhook.
 func (s *BotService) Delete(ctx context.Context, botID int64) error {
 	n, err := s.Store.CountActiveServicesByBot(ctx, botID)
@@ -59,6 +62,13 @@ func (s *BotService) Delete(ctx context.Context, botID int64) error {
 	}
 	if n > 0 {
 		return db.ErrBotHasActiveServices
+	}
+	pending, err := s.Store.CountPendingPaymentsByBot(ctx, botID)
+	if err != nil {
+		return err
+	}
+	if pending > 0 {
+		return ErrBotHasPendingPayments
 	}
 	return s.Store.SoftDeleteBot(ctx, botID)
 }

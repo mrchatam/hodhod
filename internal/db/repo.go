@@ -159,25 +159,25 @@ func (s *Store) ListBotsByAgent(ctx context.Context, agentID int64) ([]Bot, erro
 
 func (s *Store) CountBotsByAgent(ctx context.Context, agentID int64) (int64, error) {
 	var n int64
-	err := s.DB.WithContext(ctx).Model(&Bot{}).Where("agent_id = ?", agentID).Count(&n).Error
+	err := s.DB.WithContext(ctx).Model(&Bot{}).Where("agent_id = ? AND deleted_at IS NULL", agentID).Count(&n).Error
 	return n, err
 }
 
 func (s *Store) GetBot(ctx context.Context, id int64) (*Bot, error) {
 	var b Bot
-	err := s.DB.WithContext(ctx).First(&b, id).Error
+	err := s.DB.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", id).First(&b).Error
 	return &b, err
 }
 
 func (s *Store) GetBotForAgent(ctx context.Context, agentID, botID int64) (*Bot, error) {
 	var b Bot
-	err := s.DB.WithContext(ctx).Where("id = ? AND agent_id = ?", botID, agentID).First(&b).Error
+	err := s.DB.WithContext(ctx).Where("id = ? AND agent_id = ? AND deleted_at IS NULL", botID, agentID).First(&b).Error
 	return &b, err
 }
 
 func (s *Store) GetBotByPublicID(ctx context.Context, publicID string) (*Bot, error) {
 	var b Bot
-	err := s.DB.WithContext(ctx).Where("public_id = ?", publicID).First(&b).Error
+	err := s.DB.WithContext(ctx).Where("public_id = ? AND deleted_at IS NULL", publicID).First(&b).Error
 	return &b, err
 }
 
@@ -232,7 +232,7 @@ func (s *Store) ListPlansByBot(ctx context.Context, botID int64, activeOnly bool
 	if activeOnly {
 		q = q.Where("status = ?", "active")
 	}
-	return out, q.Order("id").Find(&out).Error
+	return out, q.Order("sort_order, id").Find(&out).Error
 }
 
 func (s *Store) GetPlan(ctx context.Context, botID, id int64) (*Plan, error) {
@@ -440,6 +440,12 @@ func (s *Store) ListActiveServices(ctx context.Context, botID int64) ([]Service,
 func (s *Store) ListServicesByUser(ctx context.Context, botID, endUserID int64) ([]Service, error) {
 	var out []Service
 	return out, s.DB.WithContext(ctx).Where("bot_id = ? AND end_user_id = ?", botID, endUserID).Find(&out).Error
+}
+
+func (s *Store) GetServiceByOrderID(ctx context.Context, botID, orderID int64) (*Service, error) {
+	var svc Service
+	err := s.DB.WithContext(ctx).Where("bot_id = ? AND order_id = ?", botID, orderID).First(&svc).Error
+	return &svc, err
 }
 
 func (s *Store) ListActiveServicesForPanel(ctx context.Context, panelID int64) ([]Service, error) {
